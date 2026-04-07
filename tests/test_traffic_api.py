@@ -110,5 +110,35 @@ def test_remote_index_scope_expands_index_names_and_skips_www_tecdo() -> None:
     assert "*tec-do-com*" in values
     assert "*www.tec-do.com*" not in values
     assert "*www-tec-do-com*" not in values
-    assert "*geo.tec-do.com*" not in values
-    assert "*geo-tec-do-com*" not in values
+    assert "*geo.tec-do.com*" in values
+    assert "*geo-tec-do-com*" in values
+
+
+def test_list_customer_domains_uses_real_indices_and_skips_www_tecdo() -> None:
+    source = KibanaRemoteLogSource()
+
+    def fake_post_json(path: str, payload: dict) -> dict:
+        return {
+            "rawResponse": {
+                "aggregations": {
+                    "indices": {
+                        "buckets": [
+                            {"key": "nginx-logs-www.moseeker.com-2026.04.07", "doc_count": 50},
+                            {"key": "nginx-logs-www.tec-do.com-2026.04.07", "doc_count": 40},
+                            {"key": "nginx-logs-tec-do.com-2026.04.07", "doc_count": 30},
+                            {"key": "nginx-logs-geo.tec-do.com-2026.04.07", "doc_count": 20},
+                        ]
+                    }
+                }
+            }
+        }
+
+    source._post_json = fake_post_json  # type: ignore[method-assign]
+    rows = source.list_customer_domains()
+
+    assert [row["customer"] for row in rows] == [
+        "nginx-logs-www.moseeker.com-2026.04.07",
+        "nginx-logs-tec-do.com-2026.04.07",
+        "nginx-logs-geo.tec-do.com-2026.04.07",
+    ]
+    assert rows[1]["hosts"] == ["nginx-logs-tec-do.com-2026.04.07"]

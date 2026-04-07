@@ -44,14 +44,10 @@ REMOTE_USERNAME = _env_str("TRAFFIC_REMOTE_USERNAME", "")
 REMOTE_PASSWORD = _env_str("TRAFFIC_REMOTE_PASSWORD", "")
 REMOTE_INDEX = _env_str("TRAFFIC_REMOTE_INDEX", "*nginx-logs-*")
 REMOTE_HOST_FILTER = _env_str("TRAFFIC_REMOTE_HOST_FILTER", "www.moseeker.com")
-REMOTE_CUSTOMER_DOMAINS = _env_csv("TRAFFIC_REMOTE_CUSTOMER_DOMAINS", ["www.moseeker.com", "tec-do.com"])
+REMOTE_CUSTOMER_DOMAINS = _env_csv("TRAFFIC_REMOTE_CUSTOMER_DOMAINS", [])
 REMOTE_BATCH_SIZE = _env_int("TRAFFIC_REMOTE_BATCH_SIZE", 5000)
 REMOTE_PATH = "/internal/search/es"
 REMOTE_TIMEZONE = "Asia/Shanghai"
-REMOTE_CUSTOMER_MAP = {
-    "moseeker": ["www.moseeker.com", "geo.moseeker.com"],
-    "tecdo": ["tec-do.com"],
-}
 REMOTE_AI_SEARCH_PLATFORMS = [
     ("ChatGPT-User", ["chatgpt-user"]),
     ("OAI-SearchBot", ["oai-searchbot"]),
@@ -147,7 +143,9 @@ class KibanaRemoteLogSource:
         return (dt - timedelta(days=2)).isoformat()
 
     def _search_body(self, since: str | None, search_after: list[Any] | None) -> dict[str, Any]:
-        filters: list[dict[str, Any]] = [self._scope_query(self.config.customer_domains or [self.config.host_filter])]
+        filters: list[dict[str, Any]] = []
+        if self.config.customer_domains:
+            filters.append(self._scope_query(self.config.customer_domains))
         if since:
             filters.append({"range": {"@timestamp": {"gte": since}}})
         body: dict[str, Any] = {
@@ -170,7 +168,7 @@ class KibanaRemoteLogSource:
                 "client_name",
                 "log_source",
             ],
-            "query": {"bool": {"filter": filters}},
+            "query": {"bool": {"filter": filters}} if filters else {"match_all": {}},
         }
         if search_after:
             body["search_after"] = search_after
@@ -242,23 +240,39 @@ class KibanaRemoteLogSource:
         return rows
 
     def list_customer_domains(self) -> list[dict[str, Any]]:
+        body = {
+            "size": 0,
+            "track_total_hits": False,
+            "aggs": {
+                "indices": {
+                    "terms": {
+                        "field": "_index",
+                        "size": max(self.config.batch_size, 1000),
+                        "order": {"_count": "desc"},
+                    }
+                }
+            },
+        }
+        response = self._post_json(REMOTE_PATH, {"params": {"index": self.config.index, "body": body}})
+        buckets = response.get("rawResponse", {}).get("aggregations", {}).get("indices", {}).get("buckets", [])
         results = []
-        for customer, hosts in REMOTE_CUSTOMER_MAP.items():
-            body = {
-                "size": 0,
-                "track_total_hits": False,
-                "query": {"bool": {"filter": [self._scope_query(hosts)]}},
-            }
-            response = self._post_json(REMOTE_PATH, {"params": {"index": self.config.index, "body": body}})
-            total = int(response["rawResponse"]["hits"]["total"])
-            results.append({"customer": customer, "hosts": hosts, "requests": total})
-        return sorted(results, key=lambda x: (-x["requests"], x["customer"]))
+        for bucket in buckets:
+            index_name = str(bucket.get("key") or "").strip()
+            if not index_name or self._should_skip_index_name(index_name):
+                continue
+            results.append(
+                {
+                    "customer": index_name,
+                    "hosts": [index_name],
+                    "requests": int(bucket.get("doc_count") or 0),
+                }
+            )
+        return results
 
     def get_time_bounds(self) -> dict[str, str]:
         body = {
             "size": 0,
             "track_total_hits": False,
-            "query": {"bool": {"filter": [self._scope_query(self.all_customer_hosts())]}},
             "aggs": {
                 "min_ts": {"min": {"field": "@timestamp", "format": "strict_date_optional_time"}},
                 "max_ts": {"max": {"field": "@timestamp", "format": "strict_date_optional_time"}},
@@ -389,43 +403,23 @@ class KibanaRemoteLogSource:
         return rows[: max(limit, 1)]
 
     def all_customer_hosts(self) -> list[str]:
-        hosts: list[str] = []
-        seen = set()
-        for items in REMOTE_CUSTOMER_MAP.values():
-            for item in items:
-                for host in self._merge_subdomains(item):
-                    if host and host not in seen:
-                        seen.add(host)
-                        hosts.append(host)
-        return hosts
+        return [row["customer"] for row in self.list_customer_domains()]
 
     def resolve_customer(self, customer: str | None) -> dict[str, Any] | None:
         raw = (customer or "").strip().lower()
         if not raw or raw == "all":
             return None
-        for key, hosts in REMOTE_CUSTOMER_MAP.items():
-            merged_hosts: list[str] = []
-            base_domains: list[str] = []
-            for host in hosts:
-                merged_hosts.extend(self._merge_subdomains(host))
-                base = self._extract_base_domain(self._normalize_domain(host))
-                if base:
-                    base_domains.append(base)
-            merged_hosts = sorted({item for item in merged_hosts if item})
-            base_domains = sorted({item for item in base_domains if item})
-            aliases = {key, *merged_hosts, *base_domains}
-            if raw in aliases:
+        for row in self.list_customer_domains():
+            if row["customer"].lower() == raw:
                 return {
-                    "customer": key,
-                    "hosts": merged_hosts,
-                    "base_domains": base_domains,
+                    "customer": row["customer"],
+                    "hosts": [row["customer"]],
+                    "base_domains": [row["customer"]],
                 }
-        normalized = self._normalize_domain(raw)
-        base = self._extract_base_domain(normalized)
         return {
             "customer": raw,
-            "hosts": self._merge_subdomains(normalized),
-            "base_domains": [base] if base else [],
+            "hosts": [raw],
+            "base_domains": [raw],
         }
 
     def _end_bound(self, end_utc: str) -> str:
@@ -465,8 +459,11 @@ class KibanaRemoteLogSource:
         return patterns
 
     def _should_skip_index_domain(self, domain: str) -> bool:
-        base = self._extract_base_domain(domain)
-        return base == "tec-do.com" and domain != "tec-do.com"
+        return domain in {"www.tec-do.com"}
+
+    def _should_skip_index_name(self, index_name: str) -> bool:
+        lower = index_name.lower()
+        return "www.tec-do.com" in lower or "www-tec-do-com" in lower
 
     def _merge_subdomains(self, domain: str) -> list[str]:
         host = self._normalize_domain(domain)
