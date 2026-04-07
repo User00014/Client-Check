@@ -44,13 +44,13 @@ REMOTE_USERNAME = _env_str("TRAFFIC_REMOTE_USERNAME", "")
 REMOTE_PASSWORD = _env_str("TRAFFIC_REMOTE_PASSWORD", "")
 REMOTE_INDEX = _env_str("TRAFFIC_REMOTE_INDEX", "*nginx-logs-*")
 REMOTE_HOST_FILTER = _env_str("TRAFFIC_REMOTE_HOST_FILTER", "www.moseeker.com")
-REMOTE_CUSTOMER_DOMAINS = _env_csv("TRAFFIC_REMOTE_CUSTOMER_DOMAINS", ["www.moseeker.com", "www.tec-do.com"])
+REMOTE_CUSTOMER_DOMAINS = _env_csv("TRAFFIC_REMOTE_CUSTOMER_DOMAINS", ["www.moseeker.com", "tec-do.com"])
 REMOTE_BATCH_SIZE = _env_int("TRAFFIC_REMOTE_BATCH_SIZE", 5000)
 REMOTE_PATH = "/internal/search/es"
 REMOTE_TIMEZONE = "Asia/Shanghai"
 REMOTE_CUSTOMER_MAP = {
     "moseeker": ["www.moseeker.com", "geo.moseeker.com"],
-    "tecdo": ["www.tec-do.com", "tec-do.com"],
+    "tecdo": ["tec-do.com"],
 }
 REMOTE_AI_SEARCH_PLATFORMS = [
     ("ChatGPT-User", ["chatgpt-user"]),
@@ -439,14 +439,34 @@ class KibanaRemoteLogSource:
         ]
 
     def _scope_query(self, domains: list[str]) -> dict[str, Any]:
-        hosts: list[str] = []
+        patterns = self._expand_index_patterns(domains)
+        if not patterns:
+            return {"match_all": {}}
+        return {
+            "bool": {
+                "should": [{"wildcard": {"_index": {"value": pattern}}} for pattern in patterns],
+                "minimum_should_match": 1,
+            }
+        }
+
+    def _expand_index_patterns(self, domains: list[str]) -> list[str]:
         seen = set()
+        patterns: list[str] = []
         for domain in domains:
-            for item in self._merge_subdomains(domain):
-                if item and item not in seen:
+            normalized = self._normalize_domain(domain)
+            if not normalized:
+                continue
+            if self._should_skip_index_domain(normalized):
+                continue
+            for item in (f"*{normalized}*", f"*{normalized.replace('.', '-')}*"):
+                if item not in seen:
                     seen.add(item)
-                    hosts.append(item)
-        return {"bool": {"should": [{"terms": {"host": hosts}}], "minimum_should_match": 1}}
+                    patterns.append(item)
+        return patterns
+
+    def _should_skip_index_domain(self, domain: str) -> bool:
+        base = self._extract_base_domain(domain)
+        return base == "tec-do.com" and domain != "tec-do.com"
 
     def _merge_subdomains(self, domain: str) -> list[str]:
         host = self._normalize_domain(domain)

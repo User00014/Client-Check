@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from traffic_analytics.api import create_app
 from traffic_analytics.classification import repo_classify_access
+from traffic_analytics.remote_source import KibanaRemoteLogSource
 from traffic_analytics.service import AnalyticsService
 
 
@@ -96,3 +97,18 @@ def test_customer_alias_filter_uses_base_domain(tmp_path: Path) -> None:
     )
     assert "customer_domain" in where_sql
     assert "moseeker.com" in params
+
+
+def test_remote_index_scope_expands_index_names_and_skips_www_tecdo() -> None:
+    source = KibanaRemoteLogSource()
+    scope = source._scope_query(["www.moseeker.com", "tec-do.com", "www.tec-do.com", "geo.tec-do.com"])
+    values = [item["wildcard"]["_index"]["value"] for item in scope["bool"]["should"]]
+
+    assert "*www.moseeker.com*" in values
+    assert "*www-moseeker-com*" in values
+    assert "*tec-do.com*" in values
+    assert "*tec-do-com*" in values
+    assert "*www.tec-do.com*" not in values
+    assert "*www-tec-do-com*" not in values
+    assert "*geo.tec-do.com*" not in values
+    assert "*geo-tec-do-com*" not in values
