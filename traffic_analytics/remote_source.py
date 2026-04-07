@@ -42,7 +42,7 @@ def _env_csv(name: str, default: list[str]) -> list[str]:
 REMOTE_BASE_URL = _env_str("TRAFFIC_REMOTE_BASE_URL", "")
 REMOTE_USERNAME = _env_str("TRAFFIC_REMOTE_USERNAME", "")
 REMOTE_PASSWORD = _env_str("TRAFFIC_REMOTE_PASSWORD", "")
-REMOTE_INDEX = _env_str("TRAFFIC_REMOTE_INDEX", "*nginx-logs-*")
+REMOTE_INDEX = _env_str("TRAFFIC_REMOTE_INDEX", "*nginx*")
 REMOTE_HOST_FILTER = _env_str("TRAFFIC_REMOTE_HOST_FILTER", "www.moseeker.com")
 REMOTE_CUSTOMER_DOMAINS = _env_csv("TRAFFIC_REMOTE_CUSTOMER_DOMAINS", [])
 REMOTE_BATCH_SIZE = _env_int("TRAFFIC_REMOTE_BATCH_SIZE", 5000)
@@ -452,7 +452,15 @@ class KibanaRemoteLogSource:
                 continue
             if self._should_skip_index_domain(normalized):
                 continue
-            for item in (f"*{normalized}*", f"*{normalized.replace('.', '-')}*"):
+            base = self._extract_base_domain(normalized)
+            base_label = self._base_index_label(base)
+            for item in (
+                f"*{normalized}*",
+                f"*{normalized.replace('.', '-')}*",
+                f"*{base}*" if base else "",
+                f"*{base.replace('.', '-')}*" if base else "",
+                f"*{base_label}*" if base_label else "",
+            ):
                 if item not in seen:
                     seen.add(item)
                     patterns.append(item)
@@ -464,6 +472,14 @@ class KibanaRemoteLogSource:
     def _should_skip_index_name(self, index_name: str) -> bool:
         lower = index_name.lower()
         return "www.tec-do.com" in lower or "www-tec-do-com" in lower
+
+    def _base_index_label(self, domain: str) -> str:
+        if not domain:
+            return ""
+        parts = [part for part in domain.split(".") if part]
+        if len(parts) >= 2:
+            return parts[-2]
+        return parts[0] if parts else ""
 
     def _merge_subdomains(self, domain: str) -> list[str]:
         host = self._normalize_domain(domain)

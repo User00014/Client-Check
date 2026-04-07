@@ -112,6 +112,8 @@ def test_remote_index_scope_expands_index_names_and_skips_www_tecdo() -> None:
     assert "*www-tec-do-com*" not in values
     assert "*geo.tec-do.com*" in values
     assert "*geo-tec-do-com*" in values
+    assert "*tec-do*" in values
+    assert "*moseeker*" in values
 
 
 def test_list_customer_domains_uses_real_indices_and_skips_www_tecdo() -> None:
@@ -123,10 +125,10 @@ def test_list_customer_domains_uses_real_indices_and_skips_www_tecdo() -> None:
                 "aggregations": {
                     "indices": {
                         "buckets": [
-                            {"key": "nginx-logs-www.moseeker.com-2026.04.07", "doc_count": 50},
-                            {"key": "nginx-logs-www.tec-do.com-2026.04.07", "doc_count": 40},
-                            {"key": "nginx-logs-tec-do.com-2026.04.07", "doc_count": 30},
-                            {"key": "nginx-logs-geo.tec-do.com-2026.04.07", "doc_count": 20},
+                            {"key": "nginx-prelogs-www.moseeker.com-pre-2026.04.07", "doc_count": 50},
+                            {"key": "nginx-prelogs-www.tec-do.com-pre-2026.04.07", "doc_count": 40},
+                            {"key": "nginx-prelogs-tec-do-pre-2026.04.07", "doc_count": 30},
+                            {"key": "nginx-prelogs-geo-tec-do-pre-2026.04.07", "doc_count": 20},
                         ]
                     }
                 }
@@ -137,8 +139,8 @@ def test_list_customer_domains_uses_real_indices_and_skips_www_tecdo() -> None:
     rows = source.list_customer_domains()
 
     assert [row["customer"] for row in rows] == [
-        "nginx-logs-www.moseeker.com-2026.04.07",
-        "nginx-logs-tec-do.com-2026.04.07",
-        "nginx-logs-geo.tec-do.com-2026.04.07",
+        "nginx-prelogs-www.moseeker.com-pre-2026.04.07",
+        "nginx-prelogs-tec-do-pre-2026.04.07",
+        "nginx-prelogs-geo-tec-do-pre-2026.04.07",
     ]
-    assert rows[1]["hosts"] == ["nginx-logs-tec-do.com-2026.04.07"]
+    assert rows[1]["hosts"] == ["nginx-prelogs-tec-do-pre-2026.04.07"]
