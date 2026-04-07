@@ -6,6 +6,7 @@ import os
 import ssl
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Iterator
 from urllib import request
 from urllib.parse import urlparse
@@ -13,9 +14,29 @@ from urllib.parse import urlparse
 from .classification import normalize_page, repo_classify_access
 
 
+ROOT_DIR = Path(__file__).resolve().parent.parent
+LOCAL_REMOTE_CONFIG_PATH = ROOT_DIR / "remote_source.local.json"
+
+
+def _load_local_remote_config() -> dict[str, Any]:
+    try:
+        if LOCAL_REMOTE_CONFIG_PATH.exists():
+            return json.loads(LOCAL_REMOTE_CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+LOCAL_REMOTE_CONFIG = _load_local_remote_config()
+
+
 def _env_str(name: str, default: str) -> str:
     value = os.getenv(name)
     if value is None:
+        local_value = LOCAL_REMOTE_CONFIG.get(name)
+        if isinstance(local_value, str):
+            local_value = local_value.strip()
+            return local_value if local_value else default
         return default
     value = value.strip()
     return value if value else default
@@ -24,7 +45,9 @@ def _env_str(name: str, default: str) -> str:
 def _env_int(name: str, default: int) -> int:
     value = os.getenv(name)
     if value is None:
-        return default
+        value = LOCAL_REMOTE_CONFIG.get(name)
+        if value is None:
+            return default
     try:
         return int(value)
     except ValueError:
@@ -34,7 +57,11 @@ def _env_int(name: str, default: int) -> int:
 def _env_csv(name: str, default: list[str]) -> list[str]:
     value = os.getenv(name)
     if value is None:
-        return list(default)
+        value = LOCAL_REMOTE_CONFIG.get(name)
+        if value is None:
+            return list(default)
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()] or list(default)
     items = [item.strip() for item in value.split(",")]
     return [item for item in items if item] or list(default)
 

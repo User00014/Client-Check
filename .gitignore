@@ -17,6 +17,7 @@ output/
 .env
 .venv/
 venv/
+remote_source.local.json
 
 *.pem
 *.key
