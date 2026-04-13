@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Iterable
 from urllib.parse import parse_qs, urlparse, urlsplit
 
+from .bot_taxonomy import infer_bot_name_from_ua, is_potential_unclassified_bot_ua, load_bot_taxonomy
+
 
 ASSET_EXTS = {
     ".js",
@@ -168,6 +170,40 @@ APP_RULES: tuple[AgentRule, ...] = (
 
 GENERIC_BOT_TOKENS = ("bot", "spider", "crawler")
 GENERIC_AUTOMATION_TOKENS = ("scanner", "monitor", "selenium", "playwright", "phantomjs", "java/")
+OFFICIAL_BOT_BUCKETS = {
+    "AI Search": ("AI Bot", "bot", "AI search crawl"),
+    "AI Training": ("AI Bot", "bot", "AI training crawl"),
+    "AI Index": ("AI Bot", "bot", "AI index crawl"),
+    "SEO Bot": ("SEO Bot", "bot", "SEO crawl"),
+    "Social Preview Bot": ("Social / Platform Bot", "bot", "social preview fetch"),
+    "Verification Bot": ("Verification Bot", "bot", "verification fetch"),
+    "Automation / Script": ("Automation / Script", "automation", "automation or scripted HTTP client"),
+}
+OFFICIAL_VENDOR_HINTS = (
+    ("openai", "OpenAI"),
+    ("chatgpt", "OpenAI"),
+    ("anthropic", "Anthropic"),
+    ("claude", "Anthropic"),
+    ("perplexity", "Perplexity"),
+    ("amazon", "Amazon"),
+    ("google", "Google"),
+    ("baidu", "Baidu"),
+    ("bing", "Microsoft"),
+    ("sogou", "Sogou"),
+    ("petal", "Huawei"),
+    ("meta", "Meta"),
+    ("facebook", "Meta"),
+    ("twitter", "X"),
+    ("tiktok", "TikTok"),
+    ("byte", "ByteDance"),
+    ("360", "360 Search"),
+    ("yisou", "Yisou"),
+    ("ahrefs", "Ahrefs"),
+    ("mj12", "Majestic"),
+    ("dotbot", "Moz"),
+    ("common crawl", "Common Crawl"),
+    ("ccbot", "Common Crawl"),
+)
 
 
 def sha1_short(text: str, size: int = 16) -> str:
@@ -270,6 +306,45 @@ def _match_rule(user_agent: str, rules: Iterable[AgentRule]) -> tuple[AgentRule 
     return None, None
 
 
+def _official_taxonomy_entries():
+    taxonomy = load_bot_taxonomy()
+    return sorted(taxonomy.entries, key=lambda item: (-len(item.token), item.bot_name.lower()))
+
+
+def _official_taxonomy_match(user_agent: str | None):
+    ua = (user_agent or "").strip().lower()
+    if not ua or ua == "-":
+        return None, None
+    for entry in _official_taxonomy_entries():
+        if entry.token and entry.token in ua:
+            return entry, entry.token
+    return None, None
+
+
+def _guess_vendor(bot_name: str) -> str:
+    lowered = bot_name.lower()
+    for token, vendor in OFFICIAL_VENDOR_HINTS:
+        if token in lowered:
+            return vendor
+    return "Unknown"
+
+
+def _official_entry_payload(entry, token: str) -> dict[str, str]:
+    bucket, actor_type, purpose = OFFICIAL_BOT_BUCKETS.get(entry.category, ("Other External Bot", "bot", "generic crawler activity"))
+    return {
+        "actor_type": actor_type,
+        "bucket": bucket,
+        "category": entry.category,
+        "family": entry.bot_name,
+        "vendor": _guess_vendor(entry.bot_name),
+        "product": entry.bot_name,
+        "purpose": purpose,
+        "confidence": "high",
+        "description": f"Matched official bot taxonomy category: {entry.category}.",
+        "match_token": token,
+    }
+
+
 def classify_agent(user_agent: str | None) -> dict[str, str]:
     ua = (user_agent or "").strip()
     ua_lower = ua.lower()
@@ -286,6 +361,10 @@ def classify_agent(user_agent: str | None) -> dict[str, str]:
             "description": "Missing or empty user agent.",
             "match_token": "",
         }
+
+    official_entry, official_token = _official_taxonomy_match(ua)
+    if official_entry:
+        return _official_entry_payload(official_entry, official_token or "")
 
     rule, token = _match_rule(ua, BOT_RULES)
     if rule:
@@ -456,57 +535,56 @@ def repo_is_c_mirror_host(host: str | None) -> bool:
     return h.startswith("mmm.") or h.endswith(".deeplumen.io")
 
 
+def repo_is_shopify_app_proxy(uri: str | None) -> bool:
+    path = (uri or "").strip().lower()
+    if "?" in path:
+        path = path.split("?", 1)[0]
+    return path.startswith("/app-proxy")
+
+
+def repo_is_shopify_source(source_ref: str | None) -> bool:
+    return "shopify" in (source_ref or "").strip().lower()
+
+
 def repo_classify_ai_bot(user_agent: str | None) -> tuple[str, str] | None:
-    ua = (user_agent or "").lower()
-    for token, channel in REPO_AI_RETRIEVAL_RULES:
-        if token in ua:
-            return "ai_search", channel
-    for token, channel in REPO_AI_TRAINING_RULES:
-        if token in ua:
-            return "ai_training", channel
-    for token, channel in REPO_AI_INDEX_RULES:
-        if token in ua:
-            return "ai_index", channel
-    if REPO_BAIDU_AI_RE.search(ua):
-        return "ai_index", "Baiduspider-AI"
-    for token, channel in REPO_AI_UNCLASSIFIED_RULES:
-        if token in ua:
-            return "ai_unclassified", channel
+    entry, _ = _official_taxonomy_match(user_agent)
+    if entry and entry.repo_category:
+        return entry.repo_category, entry.bot_name
     return None
 
 
 def repo_classify_seo_bot(user_agent: str | None) -> str | None:
+    entry, _ = _official_taxonomy_match(user_agent)
+    if entry and entry.category == "SEO Bot":
+        return entry.bot_name
     ua = (user_agent or "").lower()
-    if "googlebot-image" in ua:
-        return "Googlebot-Image"
-    if "googlebot" in ua:
-        return "Googlebot"
-    if "bingbot" in ua:
-        return "Bingbot"
     if "duckduckbot" in ua:
         return "DuckDuckBot"
     if "yandexbot" in ua:
         return "YandexBot"
-    if "slurp" in ua:
-        return "Slurp"
-    if "petalbot" in ua:
-        return "PetalBot"
-    if "sogou" in ua:
-        return "Sogou"
     if "sosospider" in ua:
         return "Sosospider"
-    if "baiduspider" in ua and "baiduspider-render" not in ua and not REPO_BAIDU_AI_RE.search(ua):
-        return "Baiduspider"
     for keyword in REPO_SEO_OTHER_KEYWORDS:
         if keyword in ua:
             return "Others"
     return None
 
 
-def repo_classify_access(host: str | None, uri: str | None, args: str | None, status: int | None, referer: str | None, user_agent: str | None) -> dict[str, str]:
+def repo_classify_access(
+    host: str | None,
+    uri: str | None,
+    args: str | None,
+    status: int | None,
+    referer: str | None,
+    user_agent: str | None,
+    source_ref: str | None = None,
+) -> dict[str, str]:
+    shopify_scope = repo_is_shopify_source(source_ref) or repo_is_shopify_app_proxy(uri)
+    if shopify_scope and not repo_is_shopify_app_proxy(uri):
+        return {"category": "unknown", "channel": ""}
     if repo_is_static_resource(uri):
         return {"category": "static", "channel": "StaticResource"}
-    if repo_is_c_mirror_host(host) and int(status or 0) != 302:
+    if repo_is_c_mirror_host(host) and int(status or 0) != 302 and not shopify_scope:
         return {"category": "unknown", "channel": ""}
     if repo_is_suspicious_probe(uri):
         return {"category": "suspicious_probe", "channel": "SuspiciousProbe"}
@@ -516,6 +594,11 @@ def repo_classify_access(host: str | None, uri: str | None, args: str | None, st
     seo = repo_classify_seo_bot(user_agent)
     if seo:
         return {"category": "seo_bot", "channel": seo}
+    official_entry, _ = _official_taxonomy_match(user_agent)
+    if official_entry:
+        return {"category": "unknown", "channel": official_entry.bot_name}
+    if is_potential_unclassified_bot_ua(user_agent):
+        return {"category": "unknown", "channel": infer_bot_name_from_ua(user_agent)}
     if repo_has_chatgpt_utm(uri, args):
         return {"category": "user_ai", "channel": "ChatGPT"}
 

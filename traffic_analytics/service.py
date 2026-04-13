@@ -23,6 +23,7 @@ from .classification import (
     repo_extract_base_domain,
     sha1_short,
 )
+from .index_filtering import build_select_options, filter_index_options
 from .settings import (
     AUTO_SYNC_CHECK_INTERVAL_SECONDS,
     BOT_SESSION_GAP_SECONDS,
@@ -282,14 +283,23 @@ class AnalyticsService:
 
     def _build_filter_sql(
         self,
-        customer: str | None,
-        date_from: str | None,
-        date_to: str | None,
-        exclude_sensitive_pages: bool,
+        customer: str | None = None,
+        host: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        exclude_sensitive_pages: bool = False,
+        index_names: list[str] | None = None,
     ) -> tuple[str, list[Any]]:
         filters: list[str] = []
         params: list[Any] = []
-        if customer and customer != "ALL":
+        selected_index_names = [str(item).strip() for item in (index_names or []) if str(item).strip()]
+        if selected_index_names:
+            placeholders = ", ".join("?" for _ in selected_index_names)
+            filters.append(f"source_ref IN ({placeholders})")
+            params.extend(selected_index_names)
+            if any("shopify" in item.lower() for item in selected_index_names):
+                filters.append("LOWER(COALESCE(uri, '')) LIKE '/app-proxy%'")
+        elif customer and customer != "ALL":
             resolved = self.remote_source.resolve_customer(customer)
             domains = (resolved or {}).get("base_domains") or [repo_extract_base_domain(customer)]
             hosts = (resolved or {}).get("hosts") or []
@@ -309,6 +319,9 @@ class AnalyticsService:
                 params.extend(host_fallbacks)
             if parts:
                 filters.append("(" + " OR ".join(parts) + ")")
+        if host and host != "ALL":
+            filters.append("host = ?")
+            params.append(host)
         if date_from:
             filters.append("request_day >= ?")
             params.append(date_from)
@@ -565,21 +578,41 @@ class AnalyticsService:
             top_pages=top_pages,
         )
 
-    def get_dashboard_filters(self) -> dict[str, Any]:
+    def get_dashboard_filters(
+        self,
+        customer_name: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> dict[str, Any]:
         try:
-            customers = [
-                {
-                    "host": row["customer"],
-                    "requests": row["requests"],
-                    "hosts": row["hosts"],
-                }
-                for row in self.remote_source.list_customer_domains()
-            ]
+            start_utc = end_utc = None
+            if date_from and date_to:
+                start_utc, end_utc = local_day_to_utc_bounds(date_from, date_to)
+            all_indices = self.remote_source.list_index_options(start_utc=start_utc, end_utc=end_utc)
+            filtered_indices = filter_index_options(
+                all_indices,
+                customer_name,
+                None,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            customers = build_select_options(all_indices, "customer_name", "全部客户")
+            hosts = [{"value": "ALL", "label": "全部 Host", "requests": 0}]
+            if customer_name and customer_name != "ALL":
+                hosts.extend(
+                    self.remote_source.list_host_options(
+                        index_names=[str(item.get("value") or "") for item in filtered_indices if item.get("value")],
+                        start_utc=start_utc,
+                        end_utc=end_utc,
+                    )
+                )
             bounds = self.remote_source.get_time_bounds()
             return {
                 "customers": customers,
+                "hosts": hosts,
                 "defaults": {
-                    "customer": customers[0]["host"] if customers else "",
+                    "customer_name": customer_name or "ALL",
+                    "host": "ALL",
                     "date_from": bounds.get("date_from", ""),
                     "date_to": bounds.get("date_to", ""),
                     "top_bots": 10,
@@ -589,14 +622,20 @@ class AnalyticsService:
             }
         except Exception:
             self._ensure_fresh_daily_sync()
-            customers = [
-                {
-                    "host": row["customer"],
-                    "requests": row["requests"],
-                    "hosts": row["hosts"],
-                }
-                for row in self.remote_source.list_customer_domains()
-            ]
+            all_indices = self._list_local_index_options()
+            filtered_indices = filter_index_options(
+                all_indices,
+                customer_name,
+                None,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            customers = build_select_options(all_indices, "customer_name", "全部客户")
+            hosts = [{"value": "ALL", "label": "全部 Host", "requests": 0}]
+            if customer_name and customer_name != "ALL":
+                latest_index_names = [str(item.get("value") or "") for item in filtered_indices if item.get("value")]
+                if latest_index_names:
+                    hosts.extend(self._list_local_host_options(latest_index_names))
             with self._full_conn() as conn:
                 bounds = conn.execute(
                     """
@@ -608,8 +647,10 @@ class AnalyticsService:
                 ).fetchone()
             return {
                 "customers": customers,
+                "hosts": hosts,
                 "defaults": {
-                    "customer": customers[0]["host"] if customers else "",
+                    "customer_name": customer_name or "ALL",
+                    "host": "ALL",
                     "date_from": bounds["min_day"] if bounds and bounds["min_day"] else "",
                     "date_to": bounds["max_day"] if bounds and bounds["max_day"] else "",
                     "top_bots": 10,
@@ -621,16 +662,20 @@ class AnalyticsService:
     def get_filtered_dashboard(
         self,
         customer: str | None = None,
+        customer_name: str | None = None,
+        host: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
         top_bots: int = 10,
         top_pages: int = 10,
         exclude_sensitive_pages: bool = False,
     ) -> dict[str, Any]:
+        selected_customer = customer if customer is not None else customer_name
         if date_from and date_to:
             try:
                 return self._get_filtered_dashboard_live(
-                    customer=customer,
+                    customer=selected_customer,
+                    host=host,
                     date_from=date_from,
                     date_to=date_to,
                     top_bots=top_bots,
@@ -640,10 +685,11 @@ class AnalyticsService:
             except Exception:
                 pass
         self._ensure_fresh_daily_sync()
-        where_sql, params = self._build_filter_sql(customer, date_from, date_to, exclude_sensitive_pages)
+        where_sql, params = self._build_filter_sql(selected_customer, host, date_from, date_to, exclude_sensitive_pages)
         previous_window = self._calc_previous_window(date_from, date_to)
         prev_where_sql, prev_params = self._build_filter_sql(
-            customer,
+            selected_customer,
+            host,
             previous_window.start if previous_window else None,
             previous_window.end if previous_window else None,
             exclude_sensitive_pages,
@@ -937,7 +983,8 @@ class AnalyticsService:
         prev_referred_other = max(prev_referred_total - prev_referred_chatgpt - prev_referred_perplexity, 0)
         return {
             "meta": {
-                "customer": customer or "ALL",
+                "customer_name": selected_customer or "ALL",
+                "host": host or "ALL",
                 "date_from": date_from or (card_row["date_from"] if card_row else ""),
                 "date_to": date_to or (card_row["date_to"] if card_row else ""),
                 "top_bots": max(top_bots, 1),
@@ -1054,18 +1101,29 @@ class AnalyticsService:
     def _get_filtered_dashboard_live(
         self,
         customer: str | None,
+        host: str | None,
         date_from: str,
         date_to: str,
         top_bots: int,
         top_pages: int,
         exclude_sensitive_pages: bool,
     ) -> dict[str, Any]:
-        resolved = self.remote_source.resolve_customer(customer)
-        hosts = resolved["hosts"] if resolved else self.remote_source.all_customer_hosts()
         previous_window = self._calc_previous_window(date_from, date_to)
         start_utc, end_utc = local_day_to_utc_bounds(date_from, date_to)
+        current_indices = filter_index_options(
+            self.remote_source.list_index_options(start_utc=start_utc, end_utc=end_utc),
+            customer,
+            None,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        current_index_names = [str(item.get("value") or "") for item in current_indices if item.get("value")]
+        if customer and customer != "ALL" and not current_index_names:
+            return self._empty_live_dashboard_payload(customer, host, date_from, date_to, top_bots, top_pages, exclude_sensitive_pages, previous_window)
+        host_filters = [host] if host and host != "ALL" else None
         current = self.remote_source.get_live_dashboard_window(
-            hosts=hosts,
+            index_names=current_index_names,
+            host_filters=host_filters,
             start_utc=start_utc,
             end_utc=end_utc,
             top_bots=top_bots,
@@ -1073,17 +1131,13 @@ class AnalyticsService:
             include_rankings=True,
         )
         previous = {"focused": {}, "human_referred": {}}
-        if previous_window:
-            prev_start_utc, prev_end_utc = local_day_to_utc_bounds(previous_window.start, previous_window.end)
-            previous = self.remote_source.get_live_dashboard_window(
-                hosts=hosts,
-                start_utc=prev_start_utc,
-                end_utc=prev_end_utc,
-                top_bots=top_bots,
-                top_pages=top_pages,
-                include_rankings=False,
-            )
-        access_rows = self.remote_source.get_recent_dashboard_records(hosts=hosts, start_utc=start_utc, end_utc=end_utc, limit=8)
+        access_rows = self.remote_source.get_recent_dashboard_records(
+            index_names=current_index_names,
+            host_filters=host_filters,
+            start_utc=start_utc,
+            end_utc=end_utc,
+            limit=8,
+        )
 
         focused = current["focused"]
         prev_focused = previous.get("focused", {})
@@ -1160,7 +1214,8 @@ class AnalyticsService:
 
         return {
             "meta": {
-                "customer": customer or "ALL",
+                "customer_name": customer or "ALL",
+                "host": host or "ALL",
                 "date_from": date_from,
                 "date_to": date_to,
                 "top_bots": max(top_bots, 1),
@@ -1241,6 +1296,97 @@ class AnalyticsService:
             "top_pages": current.get("page_ranking", []),
             "page_ranking": current.get("page_ranking", []),
             "access_records": access_rows,
+        }
+
+    def _empty_live_dashboard_payload(
+        self,
+        customer: str | None,
+        host: str | None,
+        date_from: str,
+        date_to: str,
+        top_bots: int,
+        top_pages: int,
+        exclude_sensitive_pages: bool,
+        previous_window: DateWindow | None,
+    ) -> dict[str, Any]:
+        return {
+            "meta": {
+                "customer_name": customer or "ALL",
+                "host": host or "ALL",
+                "date_from": date_from,
+                "date_to": date_to,
+                "top_bots": max(top_bots, 1),
+                "top_pages": max(top_pages, 1),
+                "exclude_sensitive_pages": exclude_sensitive_pages,
+                "previous_date_from": previous_window.start if previous_window else "",
+                "previous_date_to": previous_window.end if previous_window else "",
+            },
+            "cards": {
+                "total_requests": 0,
+                "user_requests": 0,
+                "ai_requests": 0,
+                "human_requests": 0,
+                "bot_requests": 0,
+                "active_users": 0,
+                "active_ai_actors": 0,
+                "active_bot_actors": 0,
+                "latest_date": "",
+                "latest_total_requests": 0,
+            },
+            "trend": [],
+            "human_summary": {
+                "total_human_traffic": 0,
+                "change_pct": None,
+                "human_ai_channel": 0,
+                "human_ai_channel_change_pct": None,
+                "human_ai_channel_share_ratio_pct": 0.0,
+                "human_traditional_channel": 0,
+                "human_traditional_channel_change_pct": None,
+                "human_traditional_channel_share_ratio_pct": 0.0,
+                "human_platform_channel": 0,
+                "human_platform_channel_change_pct": None,
+                "human_platform_channel_share_ratio_pct": 0.0,
+                "human_direct_channel": 0,
+                "human_direct_channel_change_pct": None,
+                "human_direct_channel_share_ratio_pct": 0.0,
+                "human_platform_combined_channel": 0,
+                "human_platform_combined_channel_change_pct": None,
+                "human_platform_combined_channel_share_ratio_pct": 0.0,
+            },
+            "ai_summary": {
+                "total_ai_traffic": 0,
+                "change_pct": None,
+                "ai_search": 0,
+                "ai_search_change_pct": None,
+                "ai_search_share_ratio_pct": 0.0,
+                "ai_training": 0,
+                "ai_training_change_pct": None,
+                "ai_training_share_ratio_pct": 0.0,
+                "ai_index": 0,
+                "ai_index_change_pct": None,
+                "ai_index_share_ratio_pct": 0.0,
+            },
+            "human_trend": [],
+            "ai_trend": [],
+            "human_referred_summary": {
+                "total_ai_referred_human_traffic": 0,
+                "change_pct": None,
+                "chatgpt": 0,
+                "chatgpt_change_pct": None,
+                "chatgpt_share_ratio_pct": 0.0,
+                "perplexity": 0,
+                "perplexity_change_pct": None,
+                "perplexity_share_ratio_pct": 0.0,
+                "other_ai_referred": 0,
+                "other_ai_referred_change_pct": None,
+                "other_ai_referred_share_ratio_pct": 0.0,
+            },
+            "human_referred_trend": [],
+            "ai_category_rankings": {"ai_search": [], "ai_training": [], "ai_index": []},
+            "top_bots": [],
+            "top_pages": [],
+            "page_ranking": [],
+            "access_records": [],
         }
 
     def _build_frontend_dashboard_payload(
@@ -1766,6 +1912,7 @@ class AnalyticsService:
         if not item:
             return None
 
+        resolved_source_ref = item.get("source_ref") or source_ref
         request_time = item["request_time"]
         request_day = request_time.strftime("%Y-%m-%d")
         user_agent = item.get("user_agent", "")
@@ -1777,6 +1924,7 @@ class AnalyticsService:
             item.get("status"),
             item.get("referer"),
             user_agent,
+            resolved_source_ref,
         )
         normalized_page = normalize_page(item.get("uri") or "")
         exclusion_reason = page_exclusion_reason(normalized_page)
@@ -2286,13 +2434,21 @@ class AnalyticsService:
                 returning_users = max(active_users - new_users, 0)
                 cumulative_users += new_users
 
-                category_counts = {
-                    category: full.execute(
-                        "SELECT COUNT(*) FROM requests WHERE request_day = ? AND is_counted_bot = 1 AND bot_category = ?",
-                        (day, category),
-                    ).fetchone()[0]
-                    for category in ("AI Retrieval", "AI Training", "AI Indexer", "SEO Bot", "Social Preview Bot", "Verification Bot")
+                category_aliases = {
+                    "AI Retrieval": ("AI Retrieval", "AI Search"),
+                    "AI Training": ("AI Training",),
+                    "AI Indexer": ("AI Indexer", "AI Index"),
+                    "SEO Bot": ("SEO Bot",),
+                    "Social Preview Bot": ("Social Preview Bot",),
+                    "Verification Bot": ("Verification Bot",),
                 }
+                category_counts = {}
+                for category, aliases in category_aliases.items():
+                    placeholders = ", ".join("?" for _ in aliases)
+                    category_counts[category] = full.execute(
+                        f"SELECT COUNT(*) FROM requests WHERE request_day = ? AND is_counted_bot = 1 AND bot_category IN ({placeholders})",
+                        (day, *aliases),
+                    ).fetchone()[0]
 
                 inc.execute(
                     """

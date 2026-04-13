@@ -6,99 +6,187 @@
   <title>Moseeker 流量监控面板</title>
   <style>
     :root {
-      --bg: #f5f7fb;
-      --card: #ffffff;
-      --line: #e7edf5;
-      --text: #1f2a37;
-      --muted: #7a8797;
-      --blue: #2f6bff;
-      --teal: #14b8a6;
-      --yellow: #f5b622;
-      --red: #ff4d5e;
-      --green: #19b56b;
-      --shadow: 0 10px 30px rgba(38, 57, 77, 0.08);
-      --radius: 16px;
+      --bg: #f5f1ea;
+      --bg-soft: #fbf8f3;
+      --card: rgba(255, 255, 255, 0.84);
+      --card-strong: rgba(255, 255, 255, 0.94);
+      --line: rgba(130, 111, 86, 0.16);
+      --line-strong: rgba(120, 97, 74, 0.24);
+      --text: #24343b;
+      --muted: #6f7d84;
+      --blue: #4a7279;
+      --teal: #7da295;
+      --yellow: #c9a86d;
+      --red: #c77767;
+      --green: #7f9b72;
+      --sand: #e9dcc7;
+      --shadow: 0 24px 60px rgba(84, 66, 46, 0.08);
+      --shadow-soft: 0 14px 34px rgba(72, 58, 43, 0.06);
+      --radius: 22px;
+      --radius-sm: 16px;
     }
 
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%);
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(201, 168, 109, 0.22), transparent 28%),
+        radial-gradient(circle at top right, rgba(125, 162, 149, 0.2), transparent 32%),
+        linear-gradient(180deg, #f9f6f1 0%, #f4efe7 48%, #f7f3ed 100%);
       color: var(--text);
-      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-family: "Aptos", "Segoe UI Variable", "PingFang SC", "Microsoft YaHei", sans-serif;
+      position: relative;
+    }
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: auto;
+      pointer-events: none;
+      z-index: 0;
+      border-radius: 999px;
+      filter: blur(10px);
+      opacity: 0.7;
+    }
+    body::before {
+      width: 320px;
+      height: 320px;
+      top: 80px;
+      right: -120px;
+      background: radial-gradient(circle, rgba(199, 119, 103, 0.18), transparent 70%);
+    }
+    body::after {
+      width: 280px;
+      height: 280px;
+      left: -80px;
+      bottom: 40px;
+      background: radial-gradient(circle, rgba(74, 114, 121, 0.16), transparent 70%);
     }
     .shell {
       max-width: 1680px;
       margin: 0 auto;
-      padding: 22px;
+      padding: 34px 28px 52px;
+      position: relative;
+      z-index: 1;
     }
     .toolbar {
       display: grid;
       grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 12px;
-      margin-bottom: 18px;
-      background: rgba(255,255,255,0.82);
+      gap: 16px;
+      margin-bottom: 30px;
+      background:
+        linear-gradient(145deg, rgba(255,255,255,0.86), rgba(255,255,255,0.72)),
+        linear-gradient(120deg, rgba(233,220,199,0.18), rgba(125,162,149,0.08));
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 14px;
+      padding: 22px;
       box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
     }
     label {
       display: block;
-      margin-bottom: 6px;
-      font-size: 12px;
+      margin-bottom: 8px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       color: var(--muted);
-      font-weight: 600;
+      font-weight: 700;
     }
     select, input, button {
       width: 100%;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      background: #fff;
-      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(123, 102, 79, 0.14);
+      background: rgba(255, 255, 255, 0.92);
+      padding: 12px 14px;
       font: inherit;
       color: var(--text);
+      transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, background 180ms ease;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+    }
+    select:focus, input:focus {
+      outline: none;
+      border-color: rgba(74, 114, 121, 0.42);
+      box-shadow: 0 0 0 4px rgba(74, 114, 121, 0.1);
+      background: #fff;
     }
     button {
-      background: var(--blue);
+      background: linear-gradient(135deg, #557c82 0%, #6f958b 100%);
       color: #fff;
       border: none;
-      font-weight: 700;
+      font-weight: 800;
       cursor: pointer;
-      box-shadow: 0 8px 20px rgba(47, 107, 255, 0.22);
+      box-shadow: 0 14px 28px rgba(74, 114, 121, 0.24);
+      letter-spacing: 0.02em;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 30px rgba(74, 114, 121, 0.28);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    button:disabled {
+      opacity: 0.72;
+      cursor: wait;
+      transform: none;
     }
     .hint {
       grid-column: 1 / -1;
       font-size: 12px;
       color: var(--muted);
+      padding: 6px 4px 2px;
+      line-height: 1.8;
     }
     .section {
-      margin-bottom: 24px;
+      margin-bottom: 38px;
     }
     .section-title {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin: 0 0 12px;
-      font-size: 16px;
+      gap: 10px;
+      margin: 0 0 18px;
+      font-size: 17px;
       font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+    .section-title::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--yellow), var(--teal));
+      box-shadow: 0 0 0 6px rgba(201, 168, 109, 0.14);
     }
     .grid-two {
       display: grid;
       grid-template-columns: 1.35fr 0.95fr;
-      gap: 14px;
+      gap: 20px;
     }
     .card, .table-card {
-      background: var(--card);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,255,255,0.8)),
+        linear-gradient(145deg, rgba(233,220,199,0.12), rgba(125,162,149,0.08));
       border: 1px solid var(--line);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before, .table-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 78px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.42), transparent);
+      pointer-events: none;
     }
     .card {
-      padding: 16px;
+      padding: 22px;
     }
     .big-card {
-      min-height: 132px;
+      min-height: 168px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -106,26 +194,29 @@
     .sub-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 12px;
+      gap: 18px;
+      margin-top: 18px;
     }
     .sub-grid.three {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
     .metric-title {
-      font-size: 12px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       color: var(--muted);
-      margin-bottom: 10px;
+      margin-bottom: 14px;
       font-weight: 700;
     }
     .metric-value {
-      font-size: 18px;
+      font-size: 21px;
       font-weight: 800;
     }
     .metric-value.big {
-      font-size: 42px;
+      font-size: 48px;
       color: var(--blue);
-      line-height: 1;
+      line-height: 0.96;
+      letter-spacing: -0.03em;
     }
     .metric-foot {
       display: flex;
@@ -133,66 +224,82 @@
       flex-wrap: wrap;
       font-size: 11px;
       color: var(--muted);
-      margin-top: 10px;
+      margin-top: 18px;
+      line-height: 1.5;
     }
     .delta.positive { color: var(--green); }
     .delta.negative { color: var(--red); }
     .chart-card {
-      margin-top: 12px;
-      padding: 14px 16px;
+      margin-top: 18px;
+      padding: 20px 22px;
     }
     .chart-title {
       font-size: 14px;
       font-weight: 800;
-      margin-bottom: 10px;
+      margin-bottom: 14px;
     }
     .chart-box {
       min-height: 280px;
-      border-radius: 14px;
-      background: linear-gradient(180deg, #ffffff, #fbfdff);
-      border: 1px solid var(--line);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.92), rgba(250,247,242,0.88)),
+        radial-gradient(circle at top right, rgba(125,162,149,0.08), transparent 38%);
+      border: 1px solid rgba(122, 104, 83, 0.12);
       overflow: hidden;
-      padding: 8px;
+      padding: 14px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.85);
     }
     .table-card {
-      padding: 16px;
+      padding: 22px;
     }
     .table-grid-three {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
+      gap: 20px;
     }
     .table-head {
-      margin-bottom: 12px;
+      margin-bottom: 18px;
       font-size: 15px;
       font-weight: 800;
     }
     table {
       width: 100%;
       border-collapse: collapse;
+      overflow: hidden;
     }
     th, td {
-      padding: 12px 10px;
-      border-bottom: 1px solid var(--line);
+      padding: 15px 12px;
+      border-bottom: 1px solid rgba(122, 104, 83, 0.12);
       font-size: 13px;
       text-align: left;
       vertical-align: middle;
+      line-height: 1.65;
+    }
+    tbody tr:nth-child(odd) {
+      background: rgba(247, 242, 234, 0.34);
+    }
+    tbody tr:hover {
+      background: rgba(125, 162, 149, 0.1);
     }
     th {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
       font-weight: 700;
       white-space: nowrap;
+      background: rgba(249, 245, 239, 0.88);
     }
     .badge {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 8px;
+      padding: 5px 10px;
       border-radius: 999px;
-      background: #f3f7ff;
+      background: rgba(74, 114, 121, 0.1);
       color: var(--blue);
-      font-size: 12px;
+      font-size: 11px;
+      letter-spacing: 0.04em;
       font-weight: 700;
     }
     .status-success {
@@ -206,13 +313,16 @@
     .empty {
       text-align: center;
       color: var(--muted);
-      padding: 24px;
+      padding: 40px 28px;
+      line-height: 1.85;
     }
     .footer {
-      margin-top: 14px;
+      margin-top: 24px;
       font-size: 12px;
       color: var(--muted);
       text-align: right;
+      padding-right: 4px;
+      line-height: 1.7;
     }
     @media (max-width: 1280px) {
       .toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -221,8 +331,9 @@
       .sub-grid.three { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
+      .shell { padding: 22px 16px 34px; }
       .toolbar, .sub-grid, .sub-grid.three { grid-template-columns: 1fr; }
-      .metric-value.big { font-size: 34px; }
+      .metric-value.big { font-size: 36px; }
     }
   </style>
 </head>
@@ -230,8 +341,12 @@
   <div class="shell">
     <section class="toolbar">
       <div>
-        <label for="customer">客户</label>
-        <select id="customer"></select>
+        <label for="customerName">客户</label>
+        <select id="customerName"></select>
+      </div>
+      <div>
+        <label for="host">Host</label>
+        <select id="host"></select>
       </div>
       <div>
         <label for="rangePreset">时间范围</label>
@@ -346,7 +461,8 @@
 
   <script>
     const el = {
-      customer: document.getElementById('customer'),
+      customerName: document.getElementById('customerName'),
+      host: document.getElementById('host'),
       rangePreset: document.getElementById('rangePreset'),
       dateFrom: document.getElementById('dateFrom'),
       dateTo: document.getElementById('dateTo'),
@@ -370,16 +486,16 @@
     };
 
     const colors = {
-      total: '#2f6bff',
-      humanAi: '#14b8a6',
-      humanTraditional: '#f5b622',
-      humanPlatform: '#7c3aed',
-      humanDirect: '#94a3b8',
-      aiSearch: '#14b8a6',
-      aiTraining: '#f5b622',
-      aiIndex: '#ff4d5e',
-      grid: '#e6edf5',
-      text: '#1f2a37'
+      total: '#4a7279',
+      humanAi: '#7da295',
+      humanTraditional: '#c9a86d',
+      humanPlatform: '#b98f73',
+      humanDirect: '#96a3a8',
+      aiSearch: '#7da295',
+      aiTraining: '#c9a86d',
+      aiIndex: '#c77767',
+      grid: '#e8ddd0',
+      text: '#24343b'
     };
 
     function fmt(v) {
@@ -408,6 +524,22 @@
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
+    }
+
+    function setSelectOptions(selectEl, options, preferredValue, fallbackValue = 'ALL') {
+      selectEl.innerHTML = options.map(item => `<option value="${item.value}" title="${item.label || item.value}">${item.label || item.value}</option>`).join('');
+      const values = new Set(options.map(item => item.value));
+      if (preferredValue && values.has(preferredValue)) {
+        selectEl.value = preferredValue;
+        return;
+      }
+      if (values.has(fallbackValue)) {
+        selectEl.value = fallbackValue;
+        return;
+      }
+      if (options.length > 0) {
+        selectEl.value = options[0].value;
+      }
     }
 
     function renderBigCard(container, title, value, compareText, ratioText, color = colors.total) {
@@ -536,12 +668,35 @@
     }
 
     async function loadFilters() {
-      const payload = await getJSON('/frontend/filters');
+      const params = new URLSearchParams();
+      if (el.customerName.value && el.customerName.value !== 'ALL') params.set('customer_name', el.customerName.value);
+      if (el.dateFrom.value) params.set('date_from', el.dateFrom.value);
+      if (el.dateTo.value) params.set('date_to', el.dateTo.value);
+      const payload = await getJSON(`/frontend/filters${params.toString() ? `?${params.toString()}` : ''}`);
       const customers = payload.customers || [];
-      el.customer.innerHTML = customers.map(item => `<option value="${item.host}">${item.host}</option>`).join('');
-      if (payload.defaults?.customer) el.customer.value = payload.defaults.customer;
+      const hosts = payload.hosts || [];
+      setSelectOptions(el.customerName, customers, el.customerName.value || payload.defaults?.customer_name || 'ALL');
+      setSelectOptions(el.host, hosts, el.host.value || payload.defaults?.host || 'ALL');
       if (payload.defaults?.date_from) el.dateFrom.value = payload.defaults.date_from;
       if (payload.defaults?.date_to) el.dateTo.value = payload.defaults.date_to;
+    }
+
+    function showIdleState(message = '已更新筛选条件，点击“刷新面板”后查看最新结果') {
+      const idle = `<div class="empty">${message}</div>`;
+      el.humanTrend.innerHTML = idle;
+      el.aiTrend.innerHTML = idle;
+      el.aiSearchRanking.innerHTML = idle;
+      el.aiTrainingRanking.innerHTML = idle;
+      el.aiIndexRanking.innerHTML = idle;
+      el.pageRanking.innerHTML = idle;
+      el.accessRecords.innerHTML = idle;
+      el.humanBigCard.innerHTML = idle;
+      el.humanSubCards.innerHTML = '';
+      el.humanComposition.innerHTML = idle;
+      el.aiBigCard.innerHTML = idle;
+      el.aiSubCards.innerHTML = '';
+      el.aiComposition.innerHTML = idle;
+      el.footerText.textContent = message;
     }
 
     function applyPreset() {
@@ -569,7 +724,8 @@
       el.refreshBtn.textContent = '加载中...';
       try {
         const params = new URLSearchParams({
-          customer: el.customer.value || 'ALL',
+          customer_name: el.customerName.value || 'ALL',
+          host: el.host.value || 'ALL',
           date_from: el.dateFrom.value,
           date_to: el.dateTo.value,
           top_bots: el.topBots.value,
@@ -694,7 +850,7 @@
           { key: 'access_status', label: '访问状态', render: (v) => `<span class="${String(v).toLowerCase() === 'success' ? 'status-success' : 'status-failure'}">${v === 'Success' ? '成功' : '失败'}</span>` }
         ], data.access_records || [], '暂无访问记录');
 
-        el.footerText.textContent = `客户=${data.meta?.customer || 'ALL'} | 时间范围=${data.meta?.date_from || '-'} ~ ${data.meta?.date_to || '-'} | Top Bots=${data.meta?.top_bots || '-'} | Top Pages=${data.meta?.top_pages || '-'} | 当前按总用户流量 + AI Referred 拆分 + AI Bot + AI 页面排行口径展示`;
+        el.footerText.textContent = `客户=${data.meta?.customer_name || 'ALL'} | Host=${data.meta?.host || 'ALL'} | 时间范围=${data.meta?.date_from || '-'} ~ ${data.meta?.date_to || '-'} | Top Bots=${data.meta?.top_bots || '-'} | Top Pages=${data.meta?.top_pages || '-'} | 当前按总用户流量 + AI Referred 拆分 + AI Bot + AI 页面排行口径展示`;
       } catch (error) {
         el.humanTrend.innerHTML = `<div class="empty">加载失败：${error.message}</div>`;
         el.aiTrend.innerHTML = `<div class="empty">加载失败：${error.message}</div>`;
@@ -705,17 +861,32 @@
         el.accessRecords.innerHTML = `<div class="empty">加载失败</div>`;
       } finally {
         el.refreshBtn.disabled = false;
-      el.refreshBtn.textContent = '刷新面板';
+        el.refreshBtn.textContent = '刷新面板';
       }
     }
 
-    el.rangePreset.addEventListener('change', loadDashboard);
-    el.refreshBtn.addEventListener('click', loadDashboard);
+    const refreshFilterOptionsOnly = async () => {
+      applyPreset();
+      await loadFilters();
+      showIdleState();
+    };
+    el.customerName.addEventListener('change', refreshFilterOptionsOnly);
+    el.host.addEventListener('change', () => showIdleState());
+    el.rangePreset.addEventListener('change', refreshFilterOptionsOnly);
+    el.dateFrom.addEventListener('change', refreshFilterOptionsOnly);
+    el.dateTo.addEventListener('change', refreshFilterOptionsOnly);
+    el.topBots.addEventListener('change', () => showIdleState());
+    el.topPages.addEventListener('change', () => showIdleState());
+    el.refreshBtn.addEventListener('click', async () => {
+      applyPreset();
+      await loadFilters();
+      await loadDashboard();
+    });
 
     (async function init() {
       await loadFilters();
       applyPreset();
-      await loadDashboard();
+      showIdleState('筛选项已就绪，点击“刷新面板”开始加载数据');
     })();
   </script>
 </body>

@@ -14,6 +14,27 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 DASHBOARD_HTML = WEB_DIR / "dashboard.html"
 
 
+def parse_filters_query(path: str) -> dict[str, str | None]:
+    qs = parse_qs(urlparse(path).query)
+    return {
+        "customer_name": qs["customer_name"][0] if "customer_name" in qs else None,
+        "date_from": qs["date_from"][0] if "date_from" in qs else None,
+        "date_to": qs["date_to"][0] if "date_to" in qs else None,
+    }
+
+
+def parse_dashboard_query(path: str) -> dict[str, str | int | None]:
+    qs = parse_qs(urlparse(path).query)
+    return {
+        "top_bots": int(qs["top_bots"][0]) if "top_bots" in qs else 10,
+        "top_pages": int(qs["top_pages"][0]) if "top_pages" in qs else 10,
+        "customer_name": qs["customer_name"][0] if "customer_name" in qs else None,
+        "host": qs["host"][0] if "host" in qs else None,
+        "date_from": qs["date_from"][0] if "date_from" in qs else None,
+        "date_to": qs["date_to"][0] if "date_to" in qs else None,
+    }
+
+
 def build_handler(service: AnalyticsService):
     class Handler(BaseHTTPRequestHandler):
         def _summary_from_snapshot(self):
@@ -34,6 +55,9 @@ def build_handler(service: AnalyticsService):
             self.send_response(status)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             self.wfile.write(data)
 
@@ -42,6 +66,9 @@ def build_handler(service: AnalyticsService):
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             self.wfile.write(data)
 
@@ -64,23 +91,26 @@ def build_handler(service: AnalyticsService):
                     payload = service.get_summary()
                 return self._write_json(HTTPStatus.OK, payload)
             if parsed.path == "/frontend/filters":
-                return self._write_json(HTTPStatus.OK, service.get_dashboard_filters())
+                query = parse_filters_query(self.path)
+                return self._write_json(
+                    HTTPStatus.OK,
+                    service.get_dashboard_filters(
+                        customer_name=query["customer_name"],
+                        date_from=query["date_from"],
+                        date_to=query["date_to"],
+                    ),
+                )
             if parsed.path == "/frontend/dashboard":
-                qs = parse_qs(parsed.query)
-                days = int(qs["days"][0]) if "days" in qs else 14
-                top_bots = int(qs["top_bots"][0]) if "top_bots" in qs else 10
-                top_pages = int(qs["top_pages"][0]) if "top_pages" in qs else 10
-                customer = qs["customer"][0] if "customer" in qs else None
-                date_from = qs["date_from"][0] if "date_from" in qs else None
-                date_to = qs["date_to"][0] if "date_to" in qs else None
+                query = parse_dashboard_query(self.path)
                 return self._write_json(
                     HTTPStatus.OK,
                     service.get_filtered_dashboard(
-                        customer=customer,
-                        date_from=date_from,
-                        date_to=date_to,
-                        top_bots=max(top_bots, 1),
-                        top_pages=max(top_pages, 1),
+                        customer_name=query["customer_name"],
+                        host=query["host"],
+                        date_from=query["date_from"],
+                        date_to=query["date_to"],
+                        top_bots=max(int(query["top_bots"]), 1),
+                        top_pages=max(int(query["top_pages"]), 1),
                         exclude_sensitive_pages=False,
                     ),
                 )
@@ -129,8 +159,6 @@ def main():
     service = AnalyticsService()
     if args.use_existing_db:
         print("using existing uploaded databases", flush=True)
-        service._ensure_full_schema()
-        service._ensure_increment_schema()
         service.allow_on_demand_sync = False
     else:
         print("initializing service", flush=True)

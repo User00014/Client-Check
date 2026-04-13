@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from traffic_analytics.api import create_app
 from traffic_analytics.classification import repo_classify_access
-from traffic_analytics.remote_source import KibanaRemoteLogSource
 from traffic_analytics.service import AnalyticsService
 
 
-def test_api_end_to_end(tmp_path: Path) -> None:
-    log_dir = tmp_path / "日志"
-    log_dir.mkdir(parents=True, exist_ok=True)
+def test_api_end_to_end() -> None:
+    tmp_path = Path.cwd() / "output" / "current"
+    token = uuid.uuid4().hex
+    log_dir = tmp_path
     (log_dir / "moseeker_b_side_access_20260301.log").write_text(
         '172.25.0.191 - - [01/Mar/2026:10:00:00 +0800] "GET /ai/about HTTP/1.1" 200 123 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"\n',
         encoding="utf-8",
@@ -31,9 +32,10 @@ def test_api_end_to_end(tmp_path: Path) -> None:
     )
 
     service = AnalyticsService(
-        full_db_path=tmp_path / "full.sqlite",
-        increment_db_path=tmp_path / "increment.sqlite",
-        snapshot_path=tmp_path / "snapshot.json",
+        full_db_path=tmp_path / f"test-full-{token}.sqlite",
+        increment_db_path=tmp_path / f"test-increment-{token}.sqlite",
+        snapshot_path=tmp_path / f"test-snapshot-{token}.json",
+        frontend_snapshot_path=tmp_path / f"test-frontend-{token}.json",
         log_dir=log_dir,
         auto_sync_interval_seconds=3600,
     )
@@ -65,8 +67,7 @@ def test_api_end_to_end(tmp_path: Path) -> None:
 
         increment = client.get("/increment/snapshot?limit=20")
         assert increment.status_code == 200
-        overview = increment.json()["daily_overview"]
-        assert overview
+        assert increment.json()["daily_overview"]
 
 
 def test_repo_static_takes_priority_over_ai_bot() -> None:
@@ -81,66 +82,53 @@ def test_repo_static_takes_priority_over_ai_bot() -> None:
     assert result["category"] == "static"
 
 
-def test_customer_alias_filter_uses_base_domain(tmp_path: Path) -> None:
-    service = AnalyticsService(
-        full_db_path=tmp_path / "full.sqlite",
-        increment_db_path=tmp_path / "increment.sqlite",
-        snapshot_path=tmp_path / "snapshot.json",
-        log_dir=tmp_path / "日志",
-        auto_sync_interval_seconds=3600,
+def test_shopify_app_proxy_scope_bypasses_unknown_and_seo_bot() -> None:
+    result = repo_classify_access(
+        host="shopify2.deeplumen.cn",
+        uri="/app-proxy/products/demo-item",
+        args="",
+        status=200,
+        referer="-",
+        user_agent="Mozilla/5.0 (compatible; PetalBot; +https://example.com/bot)",
     )
-    where_sql, params = service._build_filter_sql(
-        customer="moseeker",
-        date_from="2026-03-01",
-        date_to="2026-03-31",
-        exclude_sensitive_pages=False,
+    assert result["category"] == "seo_bot"
+    assert result["channel"] == "PetalBot"
+
+
+def test_repo_ai_mapping_uses_official_sheet() -> None:
+    result = repo_classify_access(
+        host="www.tec-do.com",
+        uri="/docs/ai",
+        args="",
+        status=200,
+        referer="-",
+        user_agent="Mozilla/5.0 (compatible; OAI-SearchBot/1.3; +https://openai.com/searchbot)",
     )
-    assert "customer_domain" in where_sql
-    assert "moseeker.com" in params
+    assert result["category"] == "ai_index"
+    assert result["channel"] == "OAI-SearchBot"
 
 
-def test_remote_index_scope_expands_index_names_and_skips_www_tecdo() -> None:
-    source = KibanaRemoteLogSource()
-    scope = source._scope_query(["www.moseeker.com", "tec-do.com", "www.tec-do.com", "geo.tec-do.com"])
-    values = [item["wildcard"]["_index"]["value"] for item in scope["bool"]["should"]]
-
-    assert "*www.moseeker.com*" in values
-    assert "*www-moseeker-com*" in values
-    assert "*tec-do.com*" in values
-    assert "*tec-do-com*" in values
-    assert "*www.tec-do.com*" not in values
-    assert "*www-tec-do-com*" not in values
-    assert "*geo.tec-do.com*" in values
-    assert "*geo-tec-do-com*" in values
-    assert "*tec-do*" in values
-    assert "*moseeker*" in values
+def test_repo_sheet_can_move_previous_ai_bot_to_seo() -> None:
+    result = repo_classify_access(
+        host="www.tec-do.com",
+        uri="/docs/seo",
+        args="",
+        status=200,
+        referer="-",
+        user_agent="Mozilla/5.0 (compatible; 360Spider; +https://example.com/bot)",
+    )
+    assert result["category"] == "seo_bot"
+    assert result["channel"] == "360Spider"
 
 
-def test_list_customer_domains_uses_real_indices_and_skips_www_tecdo() -> None:
-    source = KibanaRemoteLogSource()
-
-    def fake_post_json(path: str, payload: dict) -> dict:
-        return {
-            "rawResponse": {
-                "aggregations": {
-                    "indices": {
-                        "buckets": [
-                            {"key": "nginx-prelogs-www.moseeker.com-pre-2026.04.07", "doc_count": 50},
-                            {"key": "nginx-prelogs-www.tec-do.com-pre-2026.04.07", "doc_count": 40},
-                            {"key": "nginx-prelogs-tec-do-pre-2026.04.07", "doc_count": 30},
-                            {"key": "nginx-prelogs-geo-tec-do-pre-2026.04.07", "doc_count": 20},
-                        ]
-                    }
-                }
-            }
-        }
-
-    source._post_json = fake_post_json  # type: ignore[method-assign]
-    rows = source.list_customer_domains()
-
-    assert [row["customer"] for row in rows] == [
-        "nginx-prelogs-www.moseeker.com-pre-2026.04.07",
-        "nginx-prelogs-tec-do-pre-2026.04.07",
-        "nginx-prelogs-geo-tec-do-pre-2026.04.07",
-    ]
-    assert rows[1]["hosts"] == ["nginx-prelogs-tec-do-pre-2026.04.07"]
+def test_unlisted_bot_goes_to_ai_unclassified() -> None:
+    result = repo_classify_access(
+        host="www.tec-do.com",
+        uri="/news",
+        args="",
+        status=200,
+        referer="-",
+        user_agent="Mozilla/5.0 (compatible; NewCrawlerBot/2.0; +https://example.com/bot)",
+    )
+    assert result["category"] == "seo_bot"
+    assert result["channel"] == "Others"

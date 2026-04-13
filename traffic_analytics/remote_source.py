@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import os
 import ssl
@@ -10,6 +11,9 @@ from pathlib import Path
 from typing import Any, Iterator
 from urllib import request
 from urllib.parse import urlparse
+
+from .bot_taxonomy import load_bot_taxonomy
+from .index_filtering import normalize_index_option, parse_index_name
 
 from .classification import normalize_page, repo_classify_access
 
@@ -75,42 +79,7 @@ REMOTE_CUSTOMER_DOMAINS = _env_csv("TRAFFIC_REMOTE_CUSTOMER_DOMAINS", [])
 REMOTE_BATCH_SIZE = _env_int("TRAFFIC_REMOTE_BATCH_SIZE", 5000)
 REMOTE_PATH = "/internal/search/es"
 REMOTE_TIMEZONE = "Asia/Shanghai"
-REMOTE_AI_SEARCH_PLATFORMS = [
-    ("ChatGPT-User", ["chatgpt-user"]),
-    ("OAI-SearchBot", ["oai-searchbot"]),
-    ("ClaudeBot", ["claudebot"]),
-    ("claude-web", ["claude-web"]),
-    ("GoogleAgent-Mariner", ["googleagent-mariner"]),
-    ("Applebot-Extended", ["applebot-extended"]),
-    ("PerplexityBot", ["perplexitybot"]),
-    ("Perplexity-User", ["perplexity-user"]),
-    ("MistralAI-User", ["mistralai-user"]),
-    ("meta-externalagent", ["meta-externalagent"]),
-    ("cohere-ai", ["cohere-ai"]),
-    ("YouBot", ["youbot"]),
-    ("DuckAssistBot", ["duckassistbot"]),
-    ("Moonshot", ["moonshot"]),
-]
-REMOTE_AI_TRAINING_PLATFORMS = [
-    ("GPTBot", ["gptbot"]),
-    ("anthropic-ai", ["anthropic-ai"]),
-    ("Google-Extended", ["google-extended"]),
-    ("Amazonbot", ["amazonbot"]),
-    ("CCBot", ["ccbot"]),
-    ("Diffbot", ["diffbot"]),
-    ("AI2Bot", ["ai2bot"]),
-]
-REMOTE_AI_INDEX_PLATFORMS = [
-    ("GoogleOther", ["googleother"]),
-    ("Bytespider", ["bytespider"]),
-    ("ToutiaoSpider", ["toutiaospider"]),
-    ("Baiduspider-render", ["baiduspider-render"]),
-    ("Qwen", ["qwen"]),
-    ("Alibaba", ["alibaba"]),
-    ("YisouSpider", ["yisouspider"]),
-    ("360Spider", ["360spider"]),
-    ("Baiduspider-AI", ["baiduspider", "ai"]),
-]
+REMOTE_NGINX_INDEX_GLOB = "*nginx*"
 
 
 @dataclass
@@ -266,35 +235,103 @@ class KibanaRemoteLogSource:
             rows.append(item)
         return rows
 
-    def list_customer_domains(self) -> list[dict[str, Any]]:
+    def list_index_options(self, start_utc: str | None = None, end_utc: str | None = None) -> list[dict[str, Any]]:
+        filters: list[dict[str, Any]] = []
+        if start_utc and end_utc:
+            filters.append({"range": {"@timestamp": {"gte": start_utc, "lt": end_utc}}})
         body = {
             "size": 0,
             "track_total_hits": False,
+            "query": {"bool": {"filter": filters}} if filters else {"match_all": {}},
             "aggs": {
                 "indices": {
                     "terms": {
                         "field": "_index",
+                        "size": max(self.config.batch_size, 2000),
+                        "order": {"_count": "desc"},
+                    }
+                }
+            },
+        }
+        response = self._post_json(REMOTE_PATH, {"params": {"index": self._metadata_index_target(), "body": body}})
+        buckets = response.get("rawResponse", {}).get("aggregations", {}).get("indices", {}).get("buckets", [])
+        rows: list[dict[str, Any]] = []
+        for bucket in buckets:
+            index_name = str(bucket.get("key") or "").strip()
+            if not self._is_supported_index_name(index_name):
+                continue
+            if self._should_skip_index_name(index_name):
+                continue
+            row = normalize_index_option(index_name, int(bucket.get("doc_count") or 0))
+            if str(row.get("customer_name") or "").strip().lower() in {"test"}:
+                continue
+            rows.append(row)
+        rows.sort(
+            key=lambda item: (
+                str(item.get("index_date") or ""),
+                int(item.get("requests") or 0),
+                str(item.get("value") or ""),
+            ),
+            reverse=True,
+        )
+        return rows
+
+    def list_customer_domains(self, start_utc: str | None = None, end_utc: str | None = None) -> list[dict[str, Any]]:
+        grouped: dict[str, int] = {}
+        for row in self.list_index_options(start_utc=start_utc, end_utc=end_utc):
+            customer_name = str(row.get("customer_name") or "").strip()
+            if not customer_name:
+                continue
+            grouped[customer_name] = grouped.get(customer_name, 0) + int(row.get("requests") or 0)
+        return [
+            {"customer": customer_name, "requests": requests}
+            for customer_name, requests in sorted(grouped.items(), key=lambda item: (-item[1], item[0]))
+        ]
+
+    def list_host_options(
+        self,
+        index_names: list[str] | None = None,
+        start_utc: str | None = None,
+        end_utc: str | None = None,
+    ) -> list[dict[str, Any]]:
+        exact_index_names = self._clean_index_names(index_names)
+        filters: list[dict[str, Any]] = []
+        if start_utc and end_utc:
+            filters.append({"range": {"@timestamp": {"gte": start_utc, "lt": end_utc}}})
+        if self._is_shopify_scope(exact_index_names):
+            filters.append(self._shopify_path_query())
+        body = {
+            "size": 0,
+            "track_total_hits": False,
+            "query": {"bool": {"filter": filters}} if filters else {"match_all": {}},
+            "aggs": {
+                "hosts": {
+                    "terms": {
+                        "field": "host",
                         "size": max(self.config.batch_size, 1000),
                         "order": {"_count": "desc"},
                     }
                 }
             },
         }
-        response = self._post_json(REMOTE_PATH, {"params": {"index": self.config.index, "body": body}})
-        buckets = response.get("rawResponse", {}).get("aggregations", {}).get("indices", {}).get("buckets", [])
-        results = []
+        response = self._post_json(
+            REMOTE_PATH,
+            {"params": {"index": self._query_index_target(exact_index_names), "body": body}},
+        )
+        buckets = response.get("rawResponse", {}).get("aggregations", {}).get("hosts", {}).get("buckets", [])
+        rows: list[dict[str, Any]] = []
         for bucket in buckets:
-            index_name = str(bucket.get("key") or "").strip()
-            if not index_name or self._should_skip_index_name(index_name):
+            host_value = self._clean_host_value(bucket.get("key"))
+            if not self._is_displayable_host(host_value):
                 continue
-            results.append(
+            rows.append(
                 {
-                    "customer": index_name,
-                    "hosts": [index_name],
+                    "value": host_value,
+                    "label": host_value,
                     "requests": int(bucket.get("doc_count") or 0),
                 }
             )
-        return results
+        return rows
 
     def get_time_bounds(self) -> dict[str, str]:
         body = {
@@ -305,7 +342,7 @@ class KibanaRemoteLogSource:
                 "max_ts": {"max": {"field": "@timestamp", "format": "strict_date_optional_time"}},
             },
         }
-        response = self._post_json(REMOTE_PATH, {"params": {"index": self.config.index, "body": body}})
+        response = self._post_json(REMOTE_PATH, {"params": {"index": self._metadata_index_target(), "body": body}})
         aggs = response["rawResponse"]["aggregations"]
         return {
             "date_from": self._utc_to_local_day(aggs["min_ts"].get("value_as_string", "")),
@@ -314,21 +351,20 @@ class KibanaRemoteLogSource:
 
     def get_live_dashboard_window(
         self,
-        hosts: list[str],
-        start_utc: str,
-        end_utc: str,
+        index_names: list[str] | None = None,
+        host_filters: list[str] | None = None,
+        start_utc: str = "",
+        end_utc: str = "",
         top_bots: int = 10,
         top_pages: int = 10,
         include_rankings: bool = True,
     ) -> dict[str, Any]:
-        focused = self._dashboard_category_filters()
-        human_referred = self._human_referred_filters()
+        exact_index_names = self._clean_index_names(index_names)
+        shopify_scope = self._is_shopify_scope(exact_index_names)
+        focused = self._dashboard_category_filters(allow_io_mirror=shopify_scope)
+        human_referred = self._human_referred_filters(allow_io_mirror=shopify_scope)
         ai_any = {"bool": {"should": [focused["ai_search"], focused["ai_training"], focused["ai_index"]], "minimum_should_match": 1}}
         user_any = {"bool": {"should": [focused["user_traditional"], focused["user_ai"], focused["user_platform"], focused["user_direct"]], "minimum_should_match": 1}}
-        base_filters = [
-            {"range": {"@timestamp": {"gte": start_utc, "lt": end_utc}}},
-            self._scope_query(hosts),
-        ]
         aggs: dict[str, Any] = {
             "focused": {"filters": {"filters": focused}},
             "human_referred": {"filters": {"filters": human_referred}},
@@ -347,17 +383,20 @@ class KibanaRemoteLogSource:
             },
         }
         if include_rankings:
-            aggs["ai_search_rankings"] = {"filters": {"filters": self._platform_filters(REMOTE_AI_SEARCH_PLATFORMS, focused["ai_search"])}}
-            aggs["ai_training_rankings"] = {"filters": {"filters": self._platform_filters(REMOTE_AI_TRAINING_PLATFORMS, focused["ai_training"])}}
-            aggs["ai_index_rankings"] = {"filters": {"filters": self._platform_filters(REMOTE_AI_INDEX_PLATFORMS, focused["ai_index"])}}
+            aggs["ai_search_rankings"] = {"filters": {"filters": self._platform_filters(self._official_ai_platforms("ai_search"), focused["ai_search"])}}
+            aggs["ai_training_rankings"] = {"filters": {"filters": self._platform_filters(self._official_ai_platforms("ai_training"), focused["ai_training"])}}
+            aggs["ai_index_rankings"] = {"filters": {"filters": self._platform_filters(self._official_ai_platforms("ai_index"), focused["ai_index"])}}
         body = {
             "size": 0,
             "track_total_hits": False,
             "runtime_mappings": {"normalized_page": self._normalized_page_runtime()},
-            "query": {"bool": {"filter": base_filters}},
+            "query": {"bool": {"filter": self._dashboard_base_filters(start_utc, end_utc, host_filters, shopify_scope)}},
             "aggs": aggs,
         }
-        response = self._post_json(REMOTE_PATH, {"params": {"index": self.config.index, "body": body}})
+        response = self._post_json(
+            REMOTE_PATH,
+            {"params": {"index": self._query_index_target(exact_index_names), "body": body}},
+        )
         raw_aggs = response["rawResponse"]["aggregations"]
         result = {
             "focused": {key: int(item["doc_count"]) for key, item in raw_aggs["focused"]["buckets"].items()},
@@ -381,13 +420,32 @@ class KibanaRemoteLogSource:
                 rows = [{"platform": key, "requests": int(item["doc_count"])} for key, item in buckets.items() if int(item["doc_count"]) > 0]
                 rows.sort(key=lambda item: (-item["requests"], item["platform"]))
                 result["ai_category_rankings"][target_key] = rows[: max(top_bots, 1)]
-            page_keys = self._top_ai_pages(hosts, start_utc, end_utc, max(top_pages, 1))
+            page_keys = self._top_ai_pages(exact_index_names, host_filters, start_utc, end_utc, max(top_pages, 1), shopify_scope)
             if page_keys:
-                result["page_ranking"] = self._page_breakdown(hosts, start_utc, end_utc, page_keys, focused, ai_any, user_any)
+                result["page_ranking"] = self._page_breakdown(
+                    exact_index_names,
+                    host_filters,
+                    start_utc,
+                    end_utc,
+                    page_keys,
+                    focused,
+                    ai_any,
+                    user_any,
+                    shopify_scope,
+                )
         return result
 
-    def get_recent_dashboard_records(self, hosts: list[str], start_utc: str, end_utc: str, limit: int = 8) -> list[dict[str, Any]]:
-        focused = self._dashboard_category_filters()
+    def get_recent_dashboard_records(
+        self,
+        index_names: list[str] | None = None,
+        host_filters: list[str] | None = None,
+        start_utc: str = "",
+        end_utc: str = "",
+        limit: int = 8,
+    ) -> list[dict[str, Any]]:
+        exact_index_names = self._clean_index_names(index_names)
+        shopify_scope = self._is_shopify_scope(exact_index_names)
+        focused = self._dashboard_category_filters(allow_io_mirror=shopify_scope)
         any_focus = {"bool": {"should": list(focused.values()), "minimum_should_match": 1}}
         body = {
             "size": max(limit, 1),
@@ -395,15 +453,14 @@ class KibanaRemoteLogSource:
             "_source": ["@timestamp", "host", "uri", "args", "status", "referer", "ua"],
             "query": {
                 "bool": {
-                    "filter": [
-                        {"range": {"@timestamp": {"gte": start_utc, "lt": end_utc}}},
-                        self._scope_query(hosts),
-                        any_focus,
-                    ]
+                    "filter": self._dashboard_base_filters(start_utc, end_utc, host_filters, shopify_scope) + [any_focus]
                 }
             },
         }
-        response = self._post_json(REMOTE_PATH, {"params": {"index": self.config.index, "body": body}})
+        response = self._post_json(
+            REMOTE_PATH,
+            {"params": {"index": self._query_index_target(exact_index_names), "body": body}},
+        )
         rows = []
         for hit in response["rawResponse"]["hits"]["hits"]:
             source = hit.get("_source") or {}
@@ -414,6 +471,7 @@ class KibanaRemoteLogSource:
                 source.get("status"),
                 source.get("referer"),
                 source.get("ua"),
+                source_ref=hit.get("_index"),
             )
             category = classification["category"]
             if category not in {"user_traditional", "user_ai", "user_platform", "user_direct", "ai_search", "ai_training", "ai_index"}:
@@ -430,24 +488,114 @@ class KibanaRemoteLogSource:
         return rows[: max(limit, 1)]
 
     def all_customer_hosts(self) -> list[str]:
-        return [row["customer"] for row in self.list_customer_domains()]
+        return [row["value"] for row in self.list_host_options()]
 
     def resolve_customer(self, customer: str | None) -> dict[str, Any] | None:
         raw = (customer or "").strip().lower()
         if not raw or raw == "all":
             return None
-        for row in self.list_customer_domains():
-            if row["customer"].lower() == raw:
-                return {
-                    "customer": row["customer"],
-                    "hosts": [row["customer"]],
-                    "base_domains": [row["customer"]],
-                }
+        rows = [row for row in self.list_index_options() if str(row.get("customer_name") or "").lower() == raw]
+        if not rows:
+            return {
+                "customer": raw,
+                "index_names": [],
+                "hosts": [],
+                "base_domains": [raw],
+            }
         return {
-            "customer": raw,
-            "hosts": [raw],
-            "base_domains": [raw],
+            "customer": rows[0]["customer_name"],
+            "index_names": [str(row.get("value") or "") for row in rows if row.get("value")],
+            "hosts": [],
+            "base_domains": [rows[0]["customer_name"]],
         }
+
+    def _metadata_index_target(self) -> str:
+        configured = (self.config.index or "").strip()
+        if configured and configured != "*" and "nginx" in configured.lower():
+            return configured
+        return REMOTE_NGINX_INDEX_GLOB
+
+    def _query_index_target(self, index_names: list[str] | None = None) -> str:
+        exact_index_names = self._clean_index_names(index_names)
+        if exact_index_names:
+            return ",".join(exact_index_names)
+        return self._metadata_index_target()
+
+    def _clean_index_names(self, index_names: list[str] | None) -> list[str]:
+        seen: set[str] = set()
+        rows: list[str] = []
+        for index_name in index_names or []:
+            value = str(index_name or "").strip()
+            if not value or value in seen:
+                continue
+            if not self._is_supported_index_name(value):
+                continue
+            if self._should_skip_index_name(value):
+                continue
+            seen.add(value)
+            rows.append(value)
+        return rows
+
+    def _is_supported_index_name(self, index_name: str) -> bool:
+        lower = index_name.lower()
+        return "nginx" in lower and "heartbeat" not in lower
+
+    def _is_shopify_index_name(self, index_name: str) -> bool:
+        return "shopify" in index_name.lower()
+
+    def _is_shopify_scope(self, index_names: list[str] | None) -> bool:
+        return any(self._is_shopify_index_name(index_name) for index_name in (index_names or []))
+
+    def _dashboard_base_filters(
+        self,
+        start_utc: str,
+        end_utc: str,
+        host_filters: list[str] | None,
+        shopify_scope: bool,
+    ) -> list[dict[str, Any]]:
+        filters: list[dict[str, Any]] = [{"range": {"@timestamp": {"gte": start_utc, "lt": end_utc}}}]
+        cleaned_hosts = [self._clean_host_value(item) for item in (host_filters or []) if self._clean_host_value(item)]
+        if cleaned_hosts:
+            filters.append({"terms": {"host": cleaned_hosts}})
+        if shopify_scope:
+            filters.append(self._shopify_path_query())
+        return filters
+
+    def _clean_host_value(self, value: Any) -> str:
+        host = str(value or "").strip().lower()
+        if not host:
+            return ""
+        if "/" in host:
+            host = host.split("/", 1)[0]
+        return host.split(":", 1)[0]
+
+    def _is_displayable_host(self, host: str) -> bool:
+        if not host or host in {"_", "localhost", "0.0.0.0", "127.0.0.1"}:
+            return False
+        try:
+            ipaddress.ip_address(host)
+            return False
+        except ValueError:
+            pass
+        return "." in host and any(ch.isalpha() for ch in host)
+
+    def _official_ai_platforms(self, repo_category: str) -> list[tuple[str, list[str]]]:
+        taxonomy = load_bot_taxonomy()
+        rows = [
+            (entry.bot_name, [entry.token])
+            for entry in taxonomy.ai_by_repo.get(repo_category, ())
+            if entry.token
+        ]
+        rows.sort(key=lambda item: item[0].lower())
+        return rows
+
+    def _official_ai_tokens(self, repo_category: str) -> list[str]:
+        return [tokens[0] for _, tokens in self._official_ai_platforms(repo_category)]
+
+    def _official_seo_tokens(self) -> list[str]:
+        taxonomy = load_bot_taxonomy()
+        tokens = [entry.token for entry in taxonomy.non_ai_entries if entry.category == "SEO Bot" and entry.token]
+        return sorted(set(tokens))
 
     def _end_bound(self, end_utc: str) -> str:
         dt = datetime.fromisoformat(end_utc.replace("Z", "+00:00"))
@@ -543,11 +691,11 @@ class KibanaRemoteLogSource:
     def _focused_category_filters(self) -> dict[str, Any]:
         return self._dashboard_category_filters()
 
-    def _dashboard_category_filters(self) -> dict[str, Any]:
+    def _dashboard_category_filters(self, allow_io_mirror: bool = False) -> dict[str, Any]:
         ai_bot = self._ai_bot_query()
         seo_bot = self._seo_bot_query()
         static_q = self._static_resource_query()
-        mirror_non_302 = self._mirror_non_302_query()
+        mirror_non_302 = self._mirror_non_302_query(allow_io_mirror=allow_io_mirror)
         probe_q = self._suspicious_probe_query()
         user_base_must_not = [ai_bot, seo_bot, static_q, mirror_non_302, probe_q]
         ai_base_must_not = [static_q, mirror_non_302, probe_q]
@@ -586,11 +734,18 @@ class KibanaRemoteLogSource:
             "ai_index": {"bool": {"must": [self._ai_index_query()], "must_not": ai_base_must_not}},
         }
 
-    def _human_referred_filters(self) -> dict[str, Any]:
+    def _human_referred_filters(self, allow_io_mirror: bool = False) -> dict[str, Any]:
+        must_not = [
+            self._ai_bot_query(),
+            self._seo_bot_query(),
+            self._static_resource_query(),
+            self._mirror_non_302_query(allow_io_mirror=allow_io_mirror),
+            self._suspicious_probe_query(),
+        ]
         return {
-            "total": {"bool": {"should": self._user_ai_should(), "minimum_should_match": 1, "must_not": [self._ai_bot_query(), self._seo_bot_query(), self._static_resource_query(), self._mirror_non_302_query(), self._suspicious_probe_query()]}},
-            "chatgpt": {"bool": {"must_not": [self._ai_bot_query(), self._seo_bot_query(), self._static_resource_query(), self._mirror_non_302_query(), self._suspicious_probe_query()], "should": [self._chatgpt_utm_query()], "minimum_should_match": 1}},
-            "perplexity": {"bool": {"must_not": [self._ai_bot_query(), self._seo_bot_query(), self._static_resource_query(), self._mirror_non_302_query(), self._suspicious_probe_query()], "should": [self._referer_host_query('perplexity.ai')], "minimum_should_match": 1}},
+            "total": {"bool": {"should": self._user_ai_should(), "minimum_should_match": 1, "must_not": must_not}},
+            "chatgpt": {"bool": {"must_not": must_not, "should": [self._chatgpt_utm_query()], "minimum_should_match": 1}},
+            "perplexity": {"bool": {"must_not": must_not, "should": [self._referer_host_query('perplexity.ai')], "minimum_should_match": 1}},
         }
 
     def _platform_filters(self, rules: list[tuple[str, list[str]]], category_query: dict[str, Any]) -> dict[str, Any]:
@@ -630,8 +785,16 @@ class KibanaRemoteLogSource:
             return ""
         return (datetime.fromisoformat(str(value).replace("Z", "+00:00")) + timedelta(hours=8)).replace(tzinfo=None).isoformat(sep=" ")
 
-    def _top_ai_pages(self, hosts: list[str], start_utc: str, end_utc: str, limit: int) -> list[str]:
-        focused = self._dashboard_category_filters()
+    def _top_ai_pages(
+        self,
+        index_names: list[str],
+        host_filters: list[str] | None,
+        start_utc: str,
+        end_utc: str,
+        limit: int,
+        shopify_scope: bool,
+    ) -> list[str]:
+        focused = self._dashboard_category_filters(allow_io_mirror=shopify_scope)
         ai_any = {"bool": {"should": [focused["ai_search"], focused["ai_training"], focused["ai_index"]], "minimum_should_match": 1}}
         body = {
             "size": 0,
@@ -639,27 +802,25 @@ class KibanaRemoteLogSource:
             "runtime_mappings": {"normalized_page": self._normalized_page_runtime()},
             "query": {
                 "bool": {
-                    "filter": [
-                        {"range": {"@timestamp": {"gte": start_utc, "lt": end_utc}}},
-                        self._scope_query(hosts),
-                        ai_any,
-                    ]
+                    "filter": self._dashboard_base_filters(start_utc, end_utc, host_filters, shopify_scope) + [ai_any]
                 }
             },
             "aggs": {"pages": {"terms": {"field": "normalized_page", "size": max(limit, 1)}}},
         }
-        response = self._post_json(REMOTE_PATH, {"params": {"index": self.config.index, "body": body}})
+        response = self._post_json(REMOTE_PATH, {"params": {"index": self._query_index_target(index_names), "body": body}})
         return [bucket["key"] for bucket in response["rawResponse"]["aggregations"]["pages"]["buckets"] if bucket.get("key")]
 
     def _page_breakdown(
         self,
-        hosts: list[str],
+        index_names: list[str],
+        host_filters: list[str] | None,
         start_utc: str,
         end_utc: str,
         page_keys: list[str],
         focused: dict[str, Any],
         ai_any: dict[str, Any],
         user_any: dict[str, Any],
+        shopify_scope: bool,
     ) -> list[dict[str, Any]]:
         body = {
             "size": 0,
@@ -667,11 +828,7 @@ class KibanaRemoteLogSource:
             "runtime_mappings": {"normalized_page": self._normalized_page_runtime()},
             "query": {
                 "bool": {
-                    "filter": [
-                        {"range": {"@timestamp": {"gte": start_utc, "lt": end_utc}}},
-                        self._scope_query(hosts),
-                        {"terms": {"normalized_page": page_keys}},
-                    ]
+                    "filter": self._dashboard_base_filters(start_utc, end_utc, host_filters, shopify_scope) + [{"terms": {"normalized_page": page_keys}}]
                 }
             },
             "aggs": {
@@ -689,7 +846,7 @@ class KibanaRemoteLogSource:
                 }
             },
         }
-        response = self._post_json(REMOTE_PATH, {"params": {"index": self.config.index, "body": body}})
+        response = self._post_json(REMOTE_PATH, {"params": {"index": self._query_index_target(index_names), "body": body}})
         rows = []
         for bucket in response["rawResponse"]["aggregations"]["pages"]["buckets"]:
             rows.append(
@@ -733,21 +890,13 @@ class KibanaRemoteLogSource:
         return {"regexp": {"referer": {"value": pattern, "case_insensitive": True}}}
 
     def _ai_search_query(self) -> dict[str, Any]:
-        return self._any_ua_match(["chatgpt-user", "oai-searchbot", "claudebot", "claude-web", "googleagent-mariner", "applebot-extended", "perplexitybot", "perplexity-user", "mistralai-user", "meta-externalagent", "cohere-ai", "youbot", "duckassistbot", "moonshot"])
+        return self._any_ua_match(self._official_ai_tokens("ai_search"))
 
     def _ai_training_query(self) -> dict[str, Any]:
-        return self._any_ua_match(["gptbot", "anthropic-ai", "google-extended", "amazonbot", "ccbot", "diffbot", "ai2bot"])
+        return self._any_ua_match(self._official_ai_tokens("ai_training"))
 
     def _ai_index_query(self) -> dict[str, Any]:
-        return {
-            "bool": {
-                "should": [
-                    self._any_ua_match(["googleother", "bytespider", "toutiaospider", "baiduspider-render", "qwen", "alibaba", "yisouspider", "360spider"]),
-                    {"bool": {"must": [self._ua_match("baiduspider"), self._ua_match("ai")]}}
-                ],
-                "minimum_should_match": 1,
-            }
-        }
+        return self._any_ua_match(self._official_ai_tokens("ai_index"))
 
     def _ai_bot_query(self) -> dict[str, Any]:
         return {
@@ -763,27 +912,14 @@ class KibanaRemoteLogSource:
         }
 
     def _seo_bot_query(self) -> dict[str, Any]:
+        taxonomy_tokens = self._official_seo_tokens()
         return {
             "bool": {
                 "should": [
-                    self._ua_match("googlebot-image"),
-                    self._ua_match("googlebot"),
-                    self._ua_match("bingbot"),
+                    self._any_ua_match(taxonomy_tokens) if taxonomy_tokens else {"match_none": {}},
                     self._ua_match("duckduckbot"),
                     self._ua_match("yandexbot"),
-                    self._ua_match("slurp"),
-                    self._ua_match("petalbot"),
-                    self._ua_match("sogou"),
                     self._ua_match("sosospider"),
-                    {
-                        "bool": {
-                            "must": [self._ua_match("baiduspider")],
-                            "must_not": [
-                                self._ua_match("baiduspider-render"),
-                                {"bool": {"must": [self._ua_match("baiduspider"), self._ua_match("ai")]}}
-                            ],
-                        }
-                    },
                     self._any_keyword_contains("ua.keyword", ["bot", "spider", "crawler", "crawl", "slurp", "scraper", "scan", "fetch"]),
                 ],
                 "minimum_should_match": 1,
@@ -794,11 +930,17 @@ class KibanaRemoteLogSource:
         patterns = ["/.git", "/.aws", "/.env", "/.s3cfg", "/phpinfo.php", "/info.php", "/_debugbar", "/debug", "/debugbar", "/aws-credentials", "/wp-config.php", "/test.php"]
         return {"bool": {"should": [self._keyword_wildcard("uri.keyword", p + "*") for p in patterns], "minimum_should_match": 1}}
 
-    def _mirror_non_302_query(self) -> dict[str, Any]:
+    def _shopify_path_query(self) -> dict[str, Any]:
+        return self._keyword_wildcard("uri.keyword", "/app-proxy*")
+
+    def _mirror_non_302_query(self, allow_io_mirror: bool = False) -> dict[str, Any]:
+        mirror_hosts = [self._keyword_wildcard("host", "mmm.*")]
+        if not allow_io_mirror:
+            mirror_hosts.append({"regexp": {"host": {"value": ".*\\.deeplumen\\.io", "case_insensitive": True}}})
         return {
             "bool": {
                 "must": [
-                    {"bool": {"should": [self._keyword_wildcard("host", "mmm.*"), {"regexp": {"host": {"value": ".*\\.deeplumen\\.io", "case_insensitive": True}}}], "minimum_should_match": 1}}
+                    {"bool": {"should": mirror_hosts, "minimum_should_match": 1}}
                 ],
                 "must_not": [{"term": {"status": 302}}],
             }
