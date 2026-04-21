@@ -9,11 +9,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.error import HTTPError, URLError
 from urllib import request
 from urllib.parse import urlparse
 
-from .bot_taxonomy import load_bot_taxonomy
+from .bot_taxonomy import UNCLASSIFIED_BOT_HINT_TOKENS, infer_bot_name_from_ua, infer_bot_signal_from_ua, load_bot_taxonomy
 from .index_filtering import normalize_index_option, parse_index_name
+from .support import DashboardQueryError
 
 from .classification import normalize_page, repo_classify_access
 
@@ -187,8 +189,38 @@ class KibanaRemoteLogSource:
             method="POST",
         )
         context = ssl.create_default_context()
-        with request.urlopen(req, timeout=60, context=context) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        try:
+            with request.urlopen(req, timeout=60, context=context) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except HTTPError as exc:
+            try:
+                body = exc.read().decode("utf-8", errors="ignore")
+            except Exception:
+                body = ""
+            index_name = str((payload.get("params") or {}).get("index") or "")
+            raise DashboardQueryError(
+                message=f"remote ES query failed: HTTP {exc.code}",
+                error_type="remote_es_http_error",
+                source="remote_es",
+                status_code=502,
+                extra={
+                    "path": path,
+                    "index": index_name,
+                    "response": body[:4000],
+                },
+            ) from exc
+        except URLError as exc:
+            index_name = str((payload.get("params") or {}).get("index") or "")
+            raise DashboardQueryError(
+                message=f"remote ES query failed: {exc.reason}",
+                error_type="remote_es_network_error",
+                source="remote_es",
+                status_code=502,
+                extra={
+                    "path": path,
+                    "index": index_name,
+                },
+            ) from exc
 
     def _ensure_configured(self) -> None:
         if self.is_configured():
@@ -403,6 +435,7 @@ class KibanaRemoteLogSource:
             "human_referred": {key: int(item["doc_count"]) for key, item in raw_aggs["human_referred"]["buckets"].items()},
             "days": [],
             "ai_category_rankings": {"ai_search": [], "ai_training": [], "ai_index": []},
+            "unknown_bot_rankings": [],
             "page_ranking": [],
         }
         for bucket in raw_aggs["days"]["buckets"]:
@@ -433,6 +466,14 @@ class KibanaRemoteLogSource:
                     user_any,
                     shopify_scope,
                 )
+            result["unknown_bot_rankings"] = self._unknown_bot_rankings(
+                exact_index_names,
+                host_filters,
+                start_utc,
+                end_utc,
+                max(top_bots, 1),
+                shopify_scope,
+            )
         return result
 
     def get_recent_dashboard_records(
@@ -544,7 +585,8 @@ class KibanaRemoteLogSource:
         return "shopify" in index_name.lower()
 
     def _is_shopify_scope(self, index_names: list[str] | None) -> bool:
-        return any(self._is_shopify_index_name(index_name) for index_name in (index_names or []))
+        cleaned = [index_name for index_name in (index_names or []) if index_name]
+        return bool(cleaned) and all(self._is_shopify_index_name(index_name) for index_name in cleaned)
 
     def _dashboard_base_filters(
         self,
@@ -596,6 +638,23 @@ class KibanaRemoteLogSource:
         taxonomy = load_bot_taxonomy()
         tokens = [entry.token for entry in taxonomy.non_ai_entries if entry.category == "SEO Bot" and entry.token]
         return sorted(set(tokens))
+
+    def _unknown_bot_query(self, allow_io_mirror: bool = False) -> dict[str, Any]:
+        official_tokens = sorted(load_bot_taxonomy().all_tokens)
+        must_not: list[dict[str, Any]] = [
+            self._static_resource_query(),
+            self._mirror_non_302_query(allow_io_mirror=allow_io_mirror),
+            self._suspicious_probe_query(),
+        ]
+        if official_tokens:
+            must_not.append(self._any_ua_match(official_tokens))
+        return {
+            "bool": {
+                "must_not": must_not,
+                "should": [self._any_keyword_contains("ua.keyword", list(UNCLASSIFIED_BOT_HINT_TOKENS))],
+                "minimum_should_match": 1,
+            }
+        }
 
     def _end_bound(self, end_utc: str) -> str:
         dt = datetime.fromisoformat(end_utc.replace("Z", "+00:00"))
@@ -694,10 +753,11 @@ class KibanaRemoteLogSource:
     def _dashboard_category_filters(self, allow_io_mirror: bool = False) -> dict[str, Any]:
         ai_bot = self._ai_bot_query()
         seo_bot = self._seo_bot_query()
+        unknown_bot = self._unknown_bot_query(allow_io_mirror=allow_io_mirror)
         static_q = self._static_resource_query()
         mirror_non_302 = self._mirror_non_302_query(allow_io_mirror=allow_io_mirror)
         probe_q = self._suspicious_probe_query()
-        user_base_must_not = [ai_bot, seo_bot, static_q, mirror_non_302, probe_q]
+        user_base_must_not = [ai_bot, seo_bot, unknown_bot, static_q, mirror_non_302, probe_q]
         ai_base_must_not = [static_q, mirror_non_302, probe_q]
         user_ai_query = {"bool": {"should": self._user_ai_should(), "minimum_should_match": 1}}
         user_traditional_query = {"bool": {"should": self._user_traditional_should(), "minimum_should_match": 1}}
@@ -738,6 +798,7 @@ class KibanaRemoteLogSource:
         must_not = [
             self._ai_bot_query(),
             self._seo_bot_query(),
+            self._unknown_bot_query(allow_io_mirror=allow_io_mirror),
             self._static_resource_query(),
             self._mirror_non_302_query(allow_io_mirror=allow_io_mirror),
             self._suspicious_probe_query(),
@@ -864,6 +925,69 @@ class KibanaRemoteLogSource:
         rows.sort(key=lambda item: (-item["ai_requests"], item["page"]))
         return rows
 
+    def _unknown_bot_rankings(
+        self,
+        index_names: list[str],
+        host_filters: list[str] | None,
+        start_utc: str,
+        end_utc: str,
+        limit: int,
+        shopify_scope: bool,
+    ) -> list[dict[str, Any]]:
+        body = {
+            "size": 0,
+            "track_total_hits": False,
+            "query": {
+                "bool": {
+                    "filter": self._dashboard_base_filters(start_utc, end_utc, host_filters, shopify_scope) + [self._unknown_bot_query(allow_io_mirror=shopify_scope)]
+                }
+            },
+            "aggs": {
+                "uas": {
+                    "terms": {
+                        "field": "ua.keyword",
+                        "size": max(limit * 8, 50),
+                        "order": {"_count": "desc"},
+                    }
+                }
+            },
+        }
+        response = self._post_json(REMOTE_PATH, {"params": {"index": self._query_index_target(index_names), "body": body}})
+        grouped: dict[str, dict[str, Any]] = {}
+        for bucket in response["rawResponse"]["aggregations"]["uas"]["buckets"]:
+            ua_value = str(bucket.get("key") or "")
+            bot_name = infer_bot_name_from_ua(ua_value)
+            signal = infer_bot_signal_from_ua(ua_value)
+            item = grouped.setdefault(
+                bot_name,
+                {
+                    "platform": bot_name,
+                    "requests": 0,
+                    "signal": signal,
+                    "sample_ua": ua_value,
+                    "sample_ua_count": 0,
+                },
+            )
+            count = int(bucket.get("doc_count") or 0)
+            item["requests"] += count
+            if not item.get("signal") and signal:
+                item["signal"] = signal
+            if count > int(item.get("sample_ua_count") or 0):
+                item["sample_ua"] = ua_value
+                item["sample_ua_count"] = count
+        rows = [
+            {
+                "platform": item["platform"],
+                "requests": item["requests"],
+                "signal": item.get("signal") or "",
+                "sample_ua": item.get("sample_ua") or "",
+            }
+            for item in grouped.values()
+            if item.get("platform")
+        ]
+        rows.sort(key=lambda item: (-item["requests"], item["platform"]))
+        return rows[: max(limit, 1)]
+
     def _user_ai_should(self) -> list[dict[str, Any]]:
         return [self._chatgpt_utm_query(), self._referer_host_query("perplexity.ai"), self._referer_host_query("gemini.google.com")]
 
@@ -913,15 +1037,15 @@ class KibanaRemoteLogSource:
 
     def _seo_bot_query(self) -> dict[str, Any]:
         taxonomy_tokens = self._official_seo_tokens()
+        should_filters = [
+            self._any_ua_match(taxonomy_tokens) if taxonomy_tokens else {"match_none": {}},
+            self._ua_match("duckduckbot"),
+            self._ua_match("yandexbot"),
+            self._ua_match("sosospider"),
+        ]
         return {
             "bool": {
-                "should": [
-                    self._any_ua_match(taxonomy_tokens) if taxonomy_tokens else {"match_none": {}},
-                    self._ua_match("duckduckbot"),
-                    self._ua_match("yandexbot"),
-                    self._ua_match("sosospider"),
-                    self._any_keyword_contains("ua.keyword", ["bot", "spider", "crawler", "crawl", "slurp", "scraper", "scan", "fetch"]),
-                ],
+                "should": should_filters,
                 "minimum_should_match": 1,
             }
         }

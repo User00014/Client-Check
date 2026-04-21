@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from traffic_analytics.service import AnalyticsService
+from traffic_analytics.support import DashboardQueryError
 
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -72,6 +73,19 @@ def build_handler(service: AnalyticsService):
             self.end_headers()
             self.wfile.write(data)
 
+        def _write_file(self, status: int, path: Path, content_type: str, download_name: str | None = None):
+            data = path.read_bytes()
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            if download_name:
+                self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+            self.end_headers()
+            self.wfile.write(data)
+
         def _read_json(self):
             length = int(self.headers.get("Content-Length", "0"))
             raw = self.rfile.read(length) if length > 0 else b"{}"
@@ -92,28 +106,47 @@ def build_handler(service: AnalyticsService):
                 return self._write_json(HTTPStatus.OK, payload)
             if parsed.path == "/frontend/filters":
                 query = parse_filters_query(self.path)
-                return self._write_json(
-                    HTTPStatus.OK,
-                    service.get_dashboard_filters(
-                        customer_name=query["customer_name"],
-                        date_from=query["date_from"],
-                        date_to=query["date_to"],
-                    ),
-                )
+                try:
+                    return self._write_json(
+                        HTTPStatus.OK,
+                        service.get_dashboard_filters(
+                            customer_name=query["customer_name"],
+                            date_from=query["date_from"],
+                            date_to=query["date_to"],
+                        ),
+                    )
+                except DashboardQueryError as exc:
+                    return self._write_json(exc.status_code, exc.to_dict())
             if parsed.path == "/frontend/dashboard":
                 query = parse_dashboard_query(self.path)
-                return self._write_json(
-                    HTTPStatus.OK,
-                    service.get_filtered_dashboard(
-                        customer_name=query["customer_name"],
-                        host=query["host"],
-                        date_from=query["date_from"],
-                        date_to=query["date_to"],
-                        top_bots=max(int(query["top_bots"]), 1),
-                        top_pages=max(int(query["top_pages"]), 1),
-                        exclude_sensitive_pages=False,
-                    ),
-                )
+                try:
+                    return self._write_json(
+                        HTTPStatus.OK,
+                        service.get_filtered_dashboard(
+                            customer_name=query["customer_name"],
+                            host=query["host"],
+                            date_from=query["date_from"],
+                            date_to=query["date_to"],
+                            top_bots=max(int(query["top_bots"]), 1),
+                            top_pages=max(int(query["top_pages"]), 1),
+                            exclude_sensitive_pages=False,
+                        ),
+                    )
+                except DashboardQueryError as exc:
+                    return self._write_json(exc.status_code, exc.to_dict())
+            if parsed.path == "/frontend/report/download":
+                qs = parse_qs(parsed.query)
+                name = qs["name"][0] if "name" in qs else ""
+                try:
+                    report_path = service.resolve_report_download_path(name)
+                    return self._write_file(
+                        HTTPStatus.OK,
+                        report_path,
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        report_path.name,
+                    )
+                except DashboardQueryError as exc:
+                    return self._write_json(exc.status_code, exc.to_dict())
             if parsed.path == "/bots/catalog":
                 return self._write_json(HTTPStatus.OK, service.get_bot_catalog())
             if parsed.path == "/increment/snapshot":
@@ -138,6 +171,24 @@ def build_handler(service: AnalyticsService):
                     return self._write_json(HTTPStatus.BAD_REQUEST, {"detail": str(exc)})
             if self.path == "/sync":
                 return self._write_json(HTTPStatus.OK, service.sync_from_local_logs())
+            if self.path == "/frontend/report":
+                try:
+                    payload = self._read_json()
+                    result = service.generate_word_report(
+                        customer_name=payload.get("customer_name"),
+                        host=payload.get("host"),
+                        date_from=str(payload.get("date_from") or ""),
+                        date_to=str(payload.get("date_to") or ""),
+                    )
+                    return self._write_json(
+                        HTTPStatus.OK,
+                        {
+                            "filename": result["filename"],
+                            "download_url": f"/frontend/report/download?name={result['filename']}",
+                        },
+                    )
+                except DashboardQueryError as exc:
+                    return self._write_json(exc.status_code, exc.to_dict())
             return self._write_json(HTTPStatus.NOT_FOUND, {"detail": "not found"})
 
         def log_message(self, format, *args):

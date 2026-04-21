@@ -249,6 +249,148 @@
       padding: 14px;
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.85);
     }
+    .chart-interactive {
+      position: relative;
+      user-select: none;
+    }
+    .chart-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 2px 4px 12px;
+      flex-wrap: wrap;
+    }
+    .chart-caption {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .chart-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chart-series-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 0 4px 12px;
+    }
+    .chart-series-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(122, 104, 83, 0.14);
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+    }
+    .chart-series-pill:hover {
+      transform: translateY(-1px);
+      border-color: rgba(74, 114, 121, 0.22);
+    }
+    .chart-series-pill.active {
+      background: rgba(255, 255, 255, 0.96);
+      color: var(--text);
+      border-color: rgba(74, 114, 121, 0.26);
+      box-shadow: 0 8px 18px rgba(84, 66, 46, 0.08);
+    }
+    .chart-series-pill-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .chart-action {
+      border: 1px solid rgba(122, 104, 83, 0.14);
+      background: rgba(255, 255, 255, 0.88);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+    }
+    .chart-action:hover {
+      background: rgba(125, 162, 149, 0.12);
+      border-color: rgba(74, 114, 121, 0.22);
+      transform: translateY(-1px);
+    }
+    .chart-action:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .chart-svg-wrap {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .chart-svg-wrap svg {
+      display: block;
+      width: 100%;
+    }
+    .chart-hover-guide {
+      position: absolute;
+      top: 20px;
+      bottom: 42px;
+      width: 1px;
+      background: rgba(74, 114, 121, 0.26);
+      pointer-events: none;
+      display: none;
+    }
+    .chart-hover-tooltip {
+      position: absolute;
+      min-width: 148px;
+      max-width: 240px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(36, 52, 59, 0.92);
+      color: #f9f6f1;
+      box-shadow: 0 18px 36px rgba(36, 52, 59, 0.18);
+      font-size: 12px;
+      line-height: 1.65;
+      pointer-events: none;
+      display: none;
+      z-index: 2;
+      backdrop-filter: blur(8px);
+    }
+    .chart-hover-date {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: rgba(249, 246, 241, 0.74);
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+    .chart-hover-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      white-space: nowrap;
+    }
+    .chart-hover-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .chart-hover-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
     .table-card {
       padding: 22px;
     }
@@ -302,6 +444,15 @@
       letter-spacing: 0.04em;
       font-weight: 700;
     }
+    .ua-cell {
+      max-width: 520px;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.7;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 12px;
+      color: #4d5d63;
+    }
     .status-success {
       color: var(--green);
       font-weight: 700;
@@ -324,11 +475,124 @@
       padding-right: 4px;
       line-height: 1.7;
     }
+    .report-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 28px;
+      padding: 20px 22px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(249,245,239,0.82));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-soft);
+      flex-wrap: wrap;
+    }
+    .report-copy {
+      flex: 1 1 360px;
+    }
+    .report-title {
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .report-text {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+    .report-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .ghost-btn {
+      background: rgba(255,255,255,0.9);
+      color: var(--text);
+      border: 1px solid rgba(122, 104, 83, 0.16);
+      box-shadow: none;
+    }
+    .ghost-btn:hover {
+      box-shadow: none;
+      background: rgba(125, 162, 149, 0.1);
+    }
+    .report-status {
+      font-size: 12px;
+      color: var(--muted);
+      min-width: 220px;
+    }
+    .weekly-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .weekly-box {
+      border: 1px solid rgba(122, 104, 83, 0.12);
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(255,255,255,0.74);
+      overflow: hidden;
+    }
+    .weekly-box-title {
+      font-size: 13px;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+    .weekly-bars {
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+      gap: 24px;
+      min-height: 220px;
+      padding: 10px 8px 6px;
+    }
+    .weekly-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 4px;
+    }
+    .weekly-bar-col {
+      width: 92px;
+      text-align: center;
+      flex: 0 0 auto;
+    }
+    .weekly-bar-value {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .weekly-bar {
+      width: 100%;
+      border-radius: 16px 16px 6px 6px;
+      min-height: 10px;
+    }
+    .weekly-bar-label {
+      margin-top: 10px;
+      font-weight: 800;
+      font-size: 13px;
+    }
+    .weekly-bar-sub {
+      margin-top: 4px;
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+    .weekly-note {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
     @media (max-width: 1280px) {
       .toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .grid-two { grid-template-columns: 1fr; }
       .table-grid-three { grid-template-columns: 1fr; }
       .sub-grid.three { grid-template-columns: 1fr; }
+      .weekly-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
       .shell { padding: 22px 16px 34px; }
@@ -389,6 +653,18 @@
       </div>
     </section>
 
+    <section class="report-card">
+      <div class="report-copy">
+        <div class="report-title">生成统计报告</div>
+        <div class="report-text">使用当前已选择的客户、Host 和时间范围生成 Word 格式统计报告。报告章节和图表会按样例模板生成，生成完成后可直接下载。</div>
+      </div>
+      <div class="report-actions">
+        <button id="generateReportBtn">生成报告</button>
+        <button id="downloadReportBtn" class="ghost-btn" disabled>下载报告</button>
+        <div class="report-status" id="reportStatus">尚未生成报告</div>
+      </div>
+    </section>
+
     <section class="section">
       <h2 class="section-title">用户流量</h2>
       <div class="grid-two">
@@ -426,6 +702,13 @@
     </section>
 
     <section class="section">
+      <div class="table-card">
+        <div class="table-head">周维度分析</div>
+        <div id="weeklyComparison"></div>
+      </div>
+    </section>
+
+    <section class="section">
       <div class="table-grid-three">
         <div class="table-card">
           <div class="table-head">AI Search 平台排行</div>
@@ -456,6 +739,13 @@
       </div>
     </section>
 
+    <section class="section">
+      <div class="table-card">
+        <div class="table-head">Unknown Bot</div>
+        <div id="unknownBotRanking"></div>
+      </div>
+    </section>
+
     <div class="footer" id="footerText">加载中...</div>
   </div>
 
@@ -469,6 +759,9 @@
       topBots: document.getElementById('topBots'),
       topPages: document.getElementById('topPages'),
       refreshBtn: document.getElementById('refreshBtn'),
+      generateReportBtn: document.getElementById('generateReportBtn'),
+      downloadReportBtn: document.getElementById('downloadReportBtn'),
+      reportStatus: document.getElementById('reportStatus'),
       humanBigCard: document.getElementById('humanBigCard'),
       humanSubCards: document.getElementById('humanSubCards'),
       humanComposition: document.getElementById('humanComposition'),
@@ -477,11 +770,13 @@
       aiSubCards: document.getElementById('aiSubCards'),
       aiComposition: document.getElementById('aiComposition'),
       aiTrend: document.getElementById('aiTrend'),
+      weeklyComparison: document.getElementById('weeklyComparison'),
       aiSearchRanking: document.getElementById('aiSearchRanking'),
       aiTrainingRanking: document.getElementById('aiTrainingRanking'),
       aiIndexRanking: document.getElementById('aiIndexRanking'),
       pageRanking: document.getElementById('pageRanking'),
       accessRecords: document.getElementById('accessRecords'),
+      unknownBotRanking: document.getElementById('unknownBotRanking'),
       footerText: document.getElementById('footerText'),
     };
 
@@ -497,6 +792,7 @@
       grid: '#e8ddd0',
       text: '#24343b'
     };
+    const chartStates = new Map();
 
     function fmt(v) {
       return new Intl.NumberFormat('en-US').format(Number(v || 0));
@@ -524,6 +820,20 @@
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
+    }
+
+    async function postJSON(url, payload) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = data?.detail?.detail || data?.detail || `HTTP ${res.status}`;
+        throw new Error(detail);
+      }
+      return data;
     }
 
     function setSelectOptions(selectEl, options, preferredValue, fallbackValue = 'ALL') {
@@ -611,26 +921,65 @@
       `;
     }
 
+    function getChartState(container, rows, config) {
+      const key = container.id || config.title || Math.random().toString(36).slice(2);
+      const signature = `${rows.length}|${rows.map(row => row.date).join(',')}|${config.series.map(item => item.key).join(',')}`;
+      const prev = chartStates.get(key);
+      if (prev && prev.signature === signature) {
+        prev.fullRows = rows.slice();
+        prev.config = config;
+        prev.selectedKeys = prev.selectedKeys.filter(item => config.series.some(series => series.key === item));
+        if (prev.selectedKeys.length === 0) {
+          prev.selectedKeys = config.series.map(item => item.key);
+        }
+        return prev;
+      }
+      const state = {
+        key,
+        signature,
+        fullRows: rows.slice(),
+        config,
+        viewStart: 0,
+        viewEnd: Math.max(rows.length - 1, 0),
+        selectedKeys: config.series.map(item => item.key),
+      };
+      chartStates.set(key, state);
+      return state;
+    }
+
+    function clampChartWindow(state) {
+      const maxIndex = Math.max(state.fullRows.length - 1, 0);
+      state.viewStart = Math.max(0, Math.min(state.viewStart, maxIndex));
+      state.viewEnd = Math.max(state.viewStart, Math.min(state.viewEnd, maxIndex));
+    }
+
     function renderTrend(container, rows, config) {
       if (!rows || rows.length === 0) {
         container.innerHTML = '<div class="empty">暂无趋势数据</div>';
         return;
       }
-      const width = Math.max(container.clientWidth - 16, 560);
-      const height = 280;
-      const pad = { top: 16, right: 20, bottom: 34, left: 54 };
+      const state = getChartState(container, rows, config);
+      clampChartWindow(state);
+      const visibleRows = state.fullRows.slice(state.viewStart, state.viewEnd + 1);
+      const selectedSeries = config.series.filter(item => state.selectedKeys.includes(item.key));
+      const activeSeries = selectedSeries.length ? selectedSeries : config.series.slice(0, 1);
+      const width = Math.max(container.clientWidth - 18, 620);
+      const height = 310;
+      const pad = { top: 20, right: 22, bottom: 42, left: 58 };
       const plotW = width - pad.left - pad.right;
       const plotH = height - pad.top - pad.bottom;
-      const maxY = Math.max(...rows.flatMap(r => config.series.map(s => Number(r[s.key] || 0))), 1);
-      const xStep = rows.length > 1 ? plotW / (rows.length - 1) : 0;
+      const maxY = Math.max(...visibleRows.flatMap(r => activeSeries.map(s => Number(r[s.key] || 0))), 1);
+      const xStep = visibleRows.length > 1 ? plotW / (visibleRows.length - 1) : 0;
+      const canZoomIn = visibleRows.length > 2;
+      const isZoomed = state.viewStart > 0 || state.viewEnd < state.fullRows.length - 1;
 
-      const line = (key) => rows.map((row, idx) => {
+      const line = (key) => visibleRows.map((row, idx) => {
         const x = pad.left + idx * xStep;
         const y = pad.top + plotH - (Number(row[key] || 0) / maxY) * plotH;
         return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
       }).join(' ');
 
-      const xLabels = rows.map((row, idx) => {
+      const xLabels = visibleRows.map((row, idx) => {
         const x = pad.left + idx * xStep;
         return `<text x="${x}" y="${height - 10}" font-size="11" text-anchor="middle" fill="#7a8797">${row.date.slice(5)}</text>`;
       }).join('');
@@ -644,17 +993,251 @@
         `;
       }).join('');
 
-      const paths = config.series.map(s => `<path d="${line(s.key)}" fill="none" stroke="${s.color}" stroke-width="3" stroke-linecap="round"></path>`).join('');
-      const legend = config.series.map(s => `<span style="display:inline-flex;align-items:center;gap:6px;margin-left:14px;"><span style="width:8px;height:8px;border-radius:999px;background:${s.color};display:inline-block;"></span>${s.label}</span>`).join('');
+      const paths = activeSeries.map(s => `<path d="${line(s.key)}" fill="none" stroke="${s.color}" stroke-width="3" stroke-linecap="round"></path>`).join('');
+      const legend = activeSeries.map(s => `<span style="display:inline-flex;align-items:center;gap:6px;margin-left:14px;"><span style="width:8px;height:8px;border-radius:999px;background:${s.color};display:inline-block;"></span>${s.label}</span>`).join('');
+      const seriesPills = config.series.map(series => `
+        <button
+          class="chart-series-pill ${state.selectedKeys.includes(series.key) ? 'active' : ''}"
+          data-series-key="${series.key}"
+          type="button"
+        >
+          <span class="chart-series-pill-dot" style="background:${series.color}"></span>
+          ${series.label}
+        </button>
+      `).join('');
+      const svgId = `${state.key}-svg`;
 
       container.innerHTML = `
-        <div style="text-align:right;font-size:12px;color:#7a8797;padding:0 8px 8px;">${legend}</div>
-        <svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}">
-          ${grid}
-          ${paths}
-          ${xLabels}
-        </svg>
+        <div class="chart-interactive">
+          <div class="chart-toolbar">
+            <div class="chart-caption">鼠标放在图表上可滚轮缩放，拖拽框选时间区间可放大，双击图表可重置当前缩放。</div>
+            <div class="chart-actions">
+              <button class="chart-action" data-action="zoom-in" ${canZoomIn ? '' : 'disabled'}>放大</button>
+              <button class="chart-action" data-action="zoom-out" ${isZoomed ? '' : 'disabled'}>缩小</button>
+              <button class="chart-action" data-action="reset" ${isZoomed ? '' : 'disabled'}>重置</button>
+            </div>
+          </div>
+          <div class="chart-series-pills">${seriesPills}</div>
+          <div style="text-align:right;font-size:12px;color:#7a8797;padding:0 8px 8px;">${legend}</div>
+          <div class="chart-svg-wrap">
+            <svg id="${svgId}" viewBox="0 0 ${width} ${height}" width="100%" height="${height}">
+              ${grid}
+              ${paths}
+              ${xLabels}
+              <rect x="${pad.left}" y="${pad.top}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"></rect>
+            </svg>
+            <div class="chart-hover-guide" data-chart-guide></div>
+            <div class="chart-hover-tooltip" data-chart-tooltip></div>
+          </div>
+        </div>
       `;
+
+      const zoomIn = () => {
+        if (visibleRows.length <= 2) return;
+        const span = state.viewEnd - state.viewStart + 1;
+        const nextSpan = Math.max(2, Math.floor(span * 0.65));
+        const center = state.viewStart + (span - 1) / 2;
+        state.viewStart = Math.max(0, Math.round(center - (nextSpan - 1) / 2));
+        state.viewEnd = Math.min(state.fullRows.length - 1, state.viewStart + nextSpan - 1);
+        if (state.viewEnd - state.viewStart + 1 < nextSpan) {
+          state.viewStart = Math.max(0, state.viewEnd - nextSpan + 1);
+        }
+        renderTrend(container, state.fullRows, config);
+      };
+
+      const zoomOut = () => {
+        if (!isZoomed) return;
+        const span = state.viewEnd - state.viewStart + 1;
+        const nextSpan = Math.min(state.fullRows.length, Math.ceil(span * 1.5));
+        const center = state.viewStart + (span - 1) / 2;
+        state.viewStart = Math.max(0, Math.round(center - (nextSpan - 1) / 2));
+        state.viewEnd = Math.min(state.fullRows.length - 1, state.viewStart + nextSpan - 1);
+        if (state.viewEnd - state.viewStart + 1 < nextSpan) {
+          state.viewStart = Math.max(0, state.viewEnd - nextSpan + 1);
+        }
+        renderTrend(container, state.fullRows, config);
+      };
+
+      const resetZoom = () => {
+        state.viewStart = 0;
+        state.viewEnd = Math.max(state.fullRows.length - 1, 0);
+        renderTrend(container, state.fullRows, config);
+      };
+
+      container.querySelector('[data-action="zoom-in"]')?.addEventListener('click', zoomIn);
+      container.querySelector('[data-action="zoom-out"]')?.addEventListener('click', zoomOut);
+      container.querySelector('[data-action="reset"]')?.addEventListener('click', resetZoom);
+      container.querySelectorAll('[data-series-key]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const key = button.getAttribute('data-series-key');
+          if (!key) return;
+          const exists = state.selectedKeys.includes(key);
+          if (exists && state.selectedKeys.length === 1) return;
+          state.selectedKeys = exists
+            ? state.selectedKeys.filter(item => item !== key)
+            : [...state.selectedKeys, key];
+          renderTrend(container, state.fullRows, config);
+        });
+      });
+
+      const svg = document.getElementById(svgId);
+      const svgWrap = container.querySelector('.chart-svg-wrap');
+      const hoverGuide = container.querySelector('[data-chart-guide]');
+      const hoverTooltip = container.querySelector('[data-chart-tooltip]');
+      if (!svg || visibleRows.length < 2) return;
+      let dragStartX = null;
+      let selectionRect = null;
+
+      const toPlotX = (event) => {
+        const bounds = svg.getBoundingClientRect();
+        const scaleX = width / bounds.width;
+        return (event.clientX - bounds.left) * scaleX;
+      };
+
+      const toIndex = (plotX) => {
+        const ratio = (plotX - pad.left) / plotW;
+        const clamped = Math.max(0, Math.min(1, ratio));
+        return Math.round(clamped * (visibleRows.length - 1));
+      };
+
+      const pointerDown = (event) => {
+        if (event.button !== 0) return;
+        const plotX = toPlotX(event);
+        if (plotX < pad.left || plotX > pad.left + plotW) return;
+        dragStartX = plotX;
+        selectionRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        selectionRect.setAttribute('y', String(pad.top));
+        selectionRect.setAttribute('height', String(plotH));
+        selectionRect.setAttribute('fill', 'rgba(74, 114, 121, 0.14)');
+        selectionRect.setAttribute('stroke', 'rgba(74, 114, 121, 0.46)');
+        selectionRect.setAttribute('stroke-width', '1.5');
+        selectionRect.setAttribute('rx', '8');
+        svg.appendChild(selectionRect);
+      };
+
+      const pointerMove = (event) => {
+        if (dragStartX == null || !selectionRect) return;
+        const currentX = Math.max(pad.left, Math.min(pad.left + plotW, toPlotX(event)));
+        const x = Math.min(dragStartX, currentX);
+        const w = Math.abs(currentX - dragStartX);
+        selectionRect.setAttribute('x', String(x));
+        selectionRect.setAttribute('width', String(w));
+      };
+
+      const clearSelection = () => {
+        if (selectionRect?.parentNode) selectionRect.parentNode.removeChild(selectionRect);
+        selectionRect = null;
+        dragStartX = null;
+      };
+
+      const hideHover = () => {
+        if (hoverGuide) hoverGuide.style.display = 'none';
+        if (hoverTooltip) hoverTooltip.style.display = 'none';
+      };
+
+      const showHover = (event) => {
+        if (!svgWrap || !hoverGuide || !hoverTooltip) return;
+        const plotX = toPlotX(event);
+        if (plotX < pad.left || plotX > pad.left + plotW) {
+          hideHover();
+          return;
+        }
+        const localIndex = toIndex(plotX);
+        const row = visibleRows[localIndex];
+        if (!row) {
+          hideHover();
+          return;
+        }
+        const guideX = pad.left + localIndex * xStep;
+        const wrapBounds = svgWrap.getBoundingClientRect();
+        const scaleX = wrapBounds.width / width;
+        const guideLeftPx = guideX * scaleX;
+        hoverGuide.style.display = 'block';
+        hoverGuide.style.left = `${guideLeftPx}px`;
+
+        const tooltipRows = activeSeries.map((series) => `
+          <div class="chart-hover-row">
+            <span class="chart-hover-label">
+              <span class="chart-hover-dot" style="background:${series.color}"></span>
+              ${series.label}
+            </span>
+            <strong>${fmt(row[series.key])}</strong>
+          </div>
+        `).join('');
+        hoverTooltip.innerHTML = `
+          <div class="chart-hover-date">${row.date}</div>
+          ${tooltipRows}
+        `;
+        hoverTooltip.style.display = 'block';
+
+        const preferredLeft = guideLeftPx + 14;
+        const tooltipWidth = hoverTooltip.offsetWidth || 180;
+        const maxLeft = wrapBounds.width - tooltipWidth - 8;
+        const tooltipLeft = preferredLeft > maxLeft ? Math.max(8, guideLeftPx - tooltipWidth - 14) : Math.max(8, preferredLeft);
+        hoverTooltip.style.left = `${tooltipLeft}px`;
+        hoverTooltip.style.top = `${Math.max(8, pad.top * (wrapBounds.height / height) - 6)}px`;
+      };
+
+      const pointerUp = (event) => {
+        if (dragStartX == null) return;
+        const currentX = Math.max(pad.left, Math.min(pad.left + plotW, toPlotX(event)));
+        const left = Math.min(dragStartX, currentX);
+        const right = Math.max(dragStartX, currentX);
+        const widthSelected = right - left;
+        if (widthSelected >= 18) {
+          const localStart = toIndex(left);
+          const localEnd = toIndex(right);
+          const nextStart = state.viewStart + Math.min(localStart, localEnd);
+          const nextEnd = state.viewStart + Math.max(localStart, localEnd);
+          if (nextEnd > nextStart) {
+            state.viewStart = nextStart;
+            state.viewEnd = nextEnd;
+            clearSelection();
+            renderTrend(container, state.fullRows, config);
+            return;
+          }
+        }
+        clearSelection();
+      };
+
+      svg.addEventListener('mousedown', pointerDown);
+      svg.addEventListener('mousemove', pointerMove);
+      svg.addEventListener('mouseup', pointerUp);
+      svg.addEventListener('mouseleave', () => {
+        if (dragStartX != null) clearSelection();
+        hideHover();
+      });
+      svg.addEventListener('mouseenter', showHover);
+      svg.addEventListener('mousemove', showHover);
+      svg.addEventListener('dblclick', resetZoom);
+      svg.addEventListener('wheel', (event) => {
+        const plotX = toPlotX(event);
+        if (plotX < pad.left || plotX > pad.left + plotW) return;
+        event.preventDefault();
+        const span = state.viewEnd - state.viewStart + 1;
+        if (span <= 1 && event.deltaY < 0) return;
+        const localIndex = toIndex(plotX);
+        const anchorGlobal = state.viewStart + localIndex;
+        const anchorRatio = visibleRows.length > 1 ? localIndex / (visibleRows.length - 1) : 0.5;
+        const nextSpan = event.deltaY < 0
+          ? Math.max(2, Math.floor(span * 0.82))
+          : Math.min(state.fullRows.length, Math.ceil(span * 1.22));
+        if (nextSpan === span) return;
+        let nextStart = Math.round(anchorGlobal - anchorRatio * (nextSpan - 1));
+        let nextEnd = nextStart + nextSpan - 1;
+        if (nextStart < 0) {
+          nextEnd += -nextStart;
+          nextStart = 0;
+        }
+        if (nextEnd > state.fullRows.length - 1) {
+          const overflow = nextEnd - (state.fullRows.length - 1);
+          nextStart = Math.max(0, nextStart - overflow);
+          nextEnd = state.fullRows.length - 1;
+        }
+        state.viewStart = nextStart;
+        state.viewEnd = nextEnd;
+        renderTrend(container, state.fullRows, config);
+      }, { passive: false });
     }
 
     function renderTable(container, columns, rows, emptyText) {
@@ -667,7 +1250,74 @@
       container.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
     }
 
-    async function loadFilters() {
+    function renderWeeklyComparison(container, payload) {
+      const weeks = payload?.weeks || [];
+      if (weeks.length < 1) {
+        container.innerHTML = '<div class="empty">暂无周维度对比数据</div>';
+        return;
+      }
+      const maxSingle = Math.max(...weeks.flatMap(week => [week.total, week.daily_avg]), 1);
+      const maxGrouped = Math.max(...weeks.flatMap(week => [week.ai_daily_avg, week.seo_daily_avg]), 1);
+      const palette = [colors.total, colors.aiIndex, colors.aiSearch, colors.aiTraining, colors.humanPlatform, colors.humanTraditional];
+      const shortRange = (week) => `${String(week.start || '').slice(5)}~${String(week.end || '').slice(5)}`;
+      const singleBars = (valueKey, formatter, subFormatter) => `
+        <div class="weekly-scroll">
+          <div class="weekly-bars" style="min-width:${Math.max(weeks.length * 108, 320)}px;">
+          ${weeks.map((week, idx) => `
+            <div class="weekly-bar-col">
+              <div class="weekly-bar-value">${formatter(week[valueKey])}</div>
+              <div class="weekly-bar" style="height:${Math.max(12, Number(week[valueKey]) / maxSingle * 170)}px;background:${palette[idx % palette.length]};"></div>
+              <div class="weekly-bar-label">${week.label}</div>
+              <div class="weekly-bar-sub">${subFormatter(week)}</div>
+            </div>
+          `).join('')}
+          </div>
+        </div>
+      `;
+      const groupedBars = `
+        <div class="weekly-scroll">
+          <div class="weekly-bars" style="gap:16px;align-items:flex-end;min-width:${Math.max(weeks.length * 138, 320)}px;">
+          ${[
+            { label: 'AI Total', key: 'ai_daily_avg' },
+            { label: 'SEO Bot', key: 'seo_daily_avg' },
+          ].map((group) => `
+            <div class="weekly-bar-col" style="width:${Math.max(120, weeks.length * 58)}px;">
+              <div style="display:flex;align-items:flex-end;justify-content:center;gap:10px;height:180px;">
+                ${weeks.map((week, idx) => `
+                  <div style="width:42px;text-align:center;">
+                    <div class="weekly-bar-value">${Number(week[group.key] || 0).toFixed(1)}</div>
+                    <div class="weekly-bar" style="height:${Math.max(12, Number(week[group.key]) / maxGrouped * 160)}px;background:${palette[idx % palette.length]};"></div>
+                    <div class="weekly-bar-sub">${week.label}</div>
+                  </div>
+                `).join('')}
+              </div>
+              <div class="weekly-bar-label">${group.label}</div>
+            </div>
+          `).join('')}
+          </div>
+        </div>
+      `;
+      container.innerHTML = `
+        <div class="weekly-grid">
+          <div class="weekly-box">
+            <div class="weekly-box-title">总量</div>
+            ${singleBars('total', fmt, (week) => shortRange(week))}
+          </div>
+          <div class="weekly-box">
+            <div class="weekly-box-title">日均</div>
+            ${singleBars('daily_avg', (v) => Number(v || 0).toFixed(1), (week) => `${week.days} 天`)}
+          </div>
+          <div class="weekly-box">
+            <div class="weekly-box-title">分类日均</div>
+            ${groupedBars}
+          </div>
+        </div>
+        <div class="weekly-note">${payload?.note || ''}</div>
+      `;
+    }
+
+    async function loadFilters(options = {}) {
+      const { applyDefaultDates = false } = options;
       const params = new URLSearchParams();
       if (el.customerName.value && el.customerName.value !== 'ALL') params.set('customer_name', el.customerName.value);
       if (el.dateFrom.value) params.set('date_from', el.dateFrom.value);
@@ -677,8 +1327,8 @@
       const hosts = payload.hosts || [];
       setSelectOptions(el.customerName, customers, el.customerName.value || payload.defaults?.customer_name || 'ALL');
       setSelectOptions(el.host, hosts, el.host.value || payload.defaults?.host || 'ALL');
-      if (payload.defaults?.date_from) el.dateFrom.value = payload.defaults.date_from;
-      if (payload.defaults?.date_to) el.dateTo.value = payload.defaults.date_to;
+      if (applyDefaultDates && !el.dateFrom.value && payload.defaults?.date_from) el.dateFrom.value = payload.defaults.date_from;
+      if (applyDefaultDates && !el.dateTo.value && payload.defaults?.date_to) el.dateTo.value = payload.defaults.date_to;
     }
 
     function showIdleState(message = '已更新筛选条件，点击“刷新面板”后查看最新结果') {
@@ -690,6 +1340,8 @@
       el.aiIndexRanking.innerHTML = idle;
       el.pageRanking.innerHTML = idle;
       el.accessRecords.innerHTML = idle;
+      el.unknownBotRanking.innerHTML = idle;
+      el.weeklyComparison.innerHTML = idle;
       el.humanBigCard.innerHTML = idle;
       el.humanSubCards.innerHTML = '';
       el.humanComposition.innerHTML = idle;
@@ -824,6 +1476,7 @@
             { key: 'ai_index', label: 'AI Index', color: colors.aiIndex }
           ]
         });
+        renderWeeklyComparison(el.weeklyComparison, data.weekly_comparison || {});
 
         const rankings = data.ai_category_rankings || {};
         const rankingColumns = [
@@ -833,6 +1486,12 @@
         renderTable(el.aiSearchRanking, rankingColumns, rankings.ai_search || [], '暂无 AI Search 平台数据');
         renderTable(el.aiTrainingRanking, rankingColumns, rankings.ai_training || [], '暂无 AI Training 平台数据');
         renderTable(el.aiIndexRanking, rankingColumns, rankings.ai_index || [], '暂无 AI Index 平台数据');
+        renderTable(el.unknownBotRanking, [
+          { key: 'platform', label: '平台 / Bot' },
+          { key: 'requests', label: '流量', render: (v) => fmt(v) },
+          { key: 'signal', label: '关键标识', render: (v) => v ? `<code>${v}</code>` : '-' },
+          { key: 'sample_ua', label: '示例 UA', render: (v) => v ? `<div class="ua-cell">${v}</div>` : '-' }
+        ], data.unknown_bot_rankings || [], '暂无 Unknown Bot 数据');
 
         renderTable(el.pageRanking, [
           { key: 'page', label: '页面' },
@@ -859,6 +1518,8 @@
         el.aiIndexRanking.innerHTML = `<div class="empty">加载失败</div>`;
         el.pageRanking.innerHTML = `<div class="empty">加载失败</div>`;
         el.accessRecords.innerHTML = `<div class="empty">加载失败</div>`;
+        el.unknownBotRanking.innerHTML = `<div class="empty">加载失败</div>`;
+        el.weeklyComparison.innerHTML = `<div class="empty">加载失败</div>`;
       } finally {
         el.refreshBtn.disabled = false;
         el.refreshBtn.textContent = '刷新面板';
@@ -873,8 +1534,14 @@
     el.customerName.addEventListener('change', refreshFilterOptionsOnly);
     el.host.addEventListener('change', () => showIdleState());
     el.rangePreset.addEventListener('change', refreshFilterOptionsOnly);
-    el.dateFrom.addEventListener('change', refreshFilterOptionsOnly);
-    el.dateTo.addEventListener('change', refreshFilterOptionsOnly);
+    el.dateFrom.addEventListener('change', async () => {
+      el.rangePreset.value = 'custom';
+      await refreshFilterOptionsOnly();
+    });
+    el.dateTo.addEventListener('change', async () => {
+      el.rangePreset.value = 'custom';
+      await refreshFilterOptionsOnly();
+    });
     el.topBots.addEventListener('change', () => showIdleState());
     el.topPages.addEventListener('change', () => showIdleState());
     el.refreshBtn.addEventListener('click', async () => {
@@ -882,9 +1549,38 @@
       await loadFilters();
       await loadDashboard();
     });
+    el.generateReportBtn.addEventListener('click', async () => {
+      applyPreset();
+      el.generateReportBtn.disabled = true;
+      el.generateReportBtn.textContent = '生成中...';
+      el.downloadReportBtn.disabled = true;
+      el.downloadReportBtn.dataset.url = '';
+      el.reportStatus.textContent = '正在生成报告，请稍候...';
+      try {
+        const result = await postJSON('/frontend/report', {
+          customer_name: el.customerName.value || 'ALL',
+          host: el.host.value || 'ALL',
+          date_from: el.dateFrom.value,
+          date_to: el.dateTo.value,
+        });
+        el.downloadReportBtn.disabled = false;
+        el.downloadReportBtn.dataset.url = result.download_url || '';
+        el.reportStatus.textContent = `报告已生成：${result.filename || ''}`;
+      } catch (error) {
+        el.reportStatus.textContent = `生成失败：${error.message}`;
+      } finally {
+        el.generateReportBtn.disabled = false;
+        el.generateReportBtn.textContent = '生成报告';
+      }
+    });
+    el.downloadReportBtn.addEventListener('click', () => {
+      const url = el.downloadReportBtn.dataset.url;
+      if (!url) return;
+      window.location.href = url;
+    });
 
     (async function init() {
-      await loadFilters();
+      await loadFilters({ applyDefaultDates: true });
       applyPreset();
       showIdleState('筛选项已就绪，点击“刷新面板”开始加载数据');
     })();

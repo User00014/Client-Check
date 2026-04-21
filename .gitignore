@@ -8,17 +8,20 @@ output/
 日志/
 .manual_verify_tmp/
 .tmp_pytest/
+tmp/
 
 *.sqlite
 *.log
 *.csv
 *.xlsx
 *.png
+*.docx
 
 .env
 .venv/
 venv/
 remote_source.local.json
+reporting.local.json
 AI分类说明.md
 
 *.pem

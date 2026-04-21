@@ -4,14 +4,23 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .service import AnalyticsService
+from .support import DashboardQueryError
 
 
 class PostLogsRequest(BaseModel):
     side: str = Field(description="仅支持 b")
     logs: list[str | dict[str, Any]] = Field(default_factory=list)
+
+
+class GenerateReportRequest(BaseModel):
+    customer_name: str | None = None
+    host: str | None = None
+    date_from: str
+    date_to: str
 
 
 @asynccontextmanager
@@ -69,5 +78,70 @@ def create_app(service: AnalyticsService | None = None) -> FastAPI:
     @app.post("/sync")
     def sync_now() -> dict[str, Any]:
         return analytics_service.sync_from_local_logs()
+
+    @app.get("/frontend/filters")
+    def frontend_filters(
+        customer_name: str | None = Query(default=None),
+        date_from: str | None = Query(default=None),
+        date_to: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        try:
+            return analytics_service.get_dashboard_filters(
+                customer_name=customer_name,
+                date_from=date_from,
+                date_to=date_to,
+            )
+        except DashboardQueryError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
+
+    @app.get("/frontend/dashboard")
+    def frontend_dashboard(
+        customer_name: str | None = Query(default=None),
+        host: str | None = Query(default=None),
+        date_from: str | None = Query(default=None),
+        date_to: str | None = Query(default=None),
+        top_bots: int = Query(default=10, ge=1),
+        top_pages: int = Query(default=10, ge=1),
+    ) -> dict[str, Any]:
+        try:
+            return analytics_service.get_filtered_dashboard(
+                customer_name=customer_name,
+                host=host,
+                date_from=date_from,
+                date_to=date_to,
+                top_bots=top_bots,
+                top_pages=top_pages,
+                exclude_sensitive_pages=False,
+            )
+        except DashboardQueryError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
+
+    @app.post("/frontend/report")
+    def frontend_report(payload: GenerateReportRequest) -> dict[str, str]:
+        try:
+            result = analytics_service.generate_word_report(
+                customer_name=payload.customer_name,
+                host=payload.host,
+                date_from=payload.date_from,
+                date_to=payload.date_to,
+            )
+        except DashboardQueryError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
+        return {
+            "filename": result["filename"],
+            "download_url": f"/frontend/report/download?name={result['filename']}",
+        }
+
+    @app.get("/frontend/report/download")
+    def frontend_report_download(name: str = Query(...)) -> FileResponse:
+        try:
+            path = analytics_service.resolve_report_download_path(name)
+        except DashboardQueryError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=path.name,
+        )
 
     return app

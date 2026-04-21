@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, date
+from typing import Any
 
 # B 端 Nginx access log 的正则解析模板。
 B_LINE_RE = re.compile(
@@ -26,6 +27,29 @@ class DateWindow:
     """一个闭区间日期窗口，常用于和上一周期做对比。"""
     start: str
     end: str
+
+
+@dataclass
+class DashboardQueryError(RuntimeError):
+    """面向前端接口的结构化查询错误。"""
+    message: str
+    error_type: str = "dashboard_query_error"
+    source: str = "service"
+    status_code: int = 503
+    extra: dict[str, Any] | None = None
+
+    def __str__(self) -> str:
+        return self.message
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = {
+            "detail": self.message,
+            "error_type": self.error_type,
+            "source": self.source,
+        }
+        if self.extra:
+            payload["extra"] = self.extra
+        return payload
 
 
 def local_day_to_utc_bounds(day_start: str, day_end: str, tz_offset_hours: int = 8) -> tuple[str, str]:

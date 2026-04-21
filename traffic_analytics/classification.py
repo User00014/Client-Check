@@ -564,9 +564,6 @@ def repo_classify_seo_bot(user_agent: str | None) -> str | None:
         return "YandexBot"
     if "sosospider" in ua:
         return "Sosospider"
-    for keyword in REPO_SEO_OTHER_KEYWORDS:
-        if keyword in ua:
-            return "Others"
     return None
 
 
@@ -598,7 +595,7 @@ def repo_classify_access(
     if official_entry:
         return {"category": "unknown", "channel": official_entry.bot_name}
     if is_potential_unclassified_bot_ua(user_agent):
-        return {"category": "unknown", "channel": infer_bot_name_from_ua(user_agent)}
+        return {"category": "unknown_bot", "channel": infer_bot_name_from_ua(user_agent)}
     if repo_has_chatgpt_utm(uri, args):
         return {"category": "user_ai", "channel": "ChatGPT"}
 

@@ -38,6 +38,7 @@ from .settings import (
     TARGET_METHOD,
 )
 from .remote_source import KibanaRemoteLogSource
+from .support import DashboardQueryError
 
 
 B_LINE_RE = re.compile(
@@ -475,6 +476,39 @@ class AnalyticsService:
                 "snapshot": snapshot,
             }
 
+    def generate_word_report(
+        self,
+        customer_name: str | None,
+        host: str | None,
+        date_from: str,
+        date_to: str,
+    ) -> dict[str, str]:
+        from .reporting import generate_word_report
+
+        return generate_word_report(
+            self,
+            customer_name=customer_name,
+            host=host,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+    def resolve_report_download_path(self, file_name: str):
+        from .reporting import resolve_report_download_path
+
+        return resolve_report_download_path(file_name)
+
+    def generate_weekly_comparison(self, customer_name: str | None, host: str | None, date_from: str, date_to: str) -> dict[str, Any]:
+        from .reporting import generate_weekly_comparison
+
+        return generate_weekly_comparison(
+            self,
+            customer_name=customer_name,
+            host=host,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
     def get_summary(self) -> dict[str, Any]:
         self._ensure_fresh_daily_sync()
         with self._increment_conn() as conn:
@@ -584,10 +618,10 @@ class AnalyticsService:
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> dict[str, Any]:
+        start_utc = end_utc = None
+        if date_from and date_to:
+            start_utc, end_utc = local_day_to_utc_bounds(date_from, date_to)
         try:
-            start_utc = end_utc = None
-            if date_from and date_to:
-                start_utc, end_utc = local_day_to_utc_bounds(date_from, date_to)
             all_indices = self.remote_source.list_index_options(start_utc=start_utc, end_utc=end_utc)
             filtered_indices = filter_index_options(
                 all_indices,
@@ -620,44 +654,19 @@ class AnalyticsService:
                     "exclude_sensitive_pages": False,
                 },
             }
-        except Exception:
-            self._ensure_fresh_daily_sync()
-            all_indices = self._list_local_index_options()
-            filtered_indices = filter_index_options(
-                all_indices,
-                customer_name,
-                None,
-                date_from=date_from,
-                date_to=date_to,
-            )
-            customers = build_select_options(all_indices, "customer_name", "全部客户")
-            hosts = [{"value": "ALL", "label": "全部 Host", "requests": 0}]
-            if customer_name and customer_name != "ALL":
-                latest_index_names = [str(item.get("value") or "") for item in filtered_indices if item.get("value")]
-                if latest_index_names:
-                    hosts.extend(self._list_local_host_options(latest_index_names))
-            with self._full_conn() as conn:
-                bounds = conn.execute(
-                    """
-                    SELECT
-                        MIN(request_day) AS min_day,
-                        MAX(request_day) AS max_day
-                    FROM requests
-                    """
-                ).fetchone()
-            return {
-                "customers": customers,
-                "hosts": hosts,
-                "defaults": {
+        except DashboardQueryError as exc:
+            raise DashboardQueryError(
+                message="dashboard filters query failed",
+                error_type="dashboard_filters_failed",
+                source="service",
+                status_code=exc.status_code,
+                extra={
                     "customer_name": customer_name or "ALL",
-                    "host": "ALL",
-                    "date_from": bounds["min_day"] if bounds and bounds["min_day"] else "",
-                    "date_to": bounds["max_day"] if bounds and bounds["max_day"] else "",
-                    "top_bots": 10,
-                    "top_pages": 10,
-                    "exclude_sensitive_pages": False,
+                    "date_from": date_from or "",
+                    "date_to": date_to or "",
+                    "cause": exc.to_dict(),
                 },
-            }
+            ) from exc
 
     def get_filtered_dashboard(
         self,
@@ -682,8 +691,22 @@ class AnalyticsService:
                     top_pages=top_pages,
                     exclude_sensitive_pages=exclude_sensitive_pages,
                 )
-            except Exception:
-                pass
+            except DashboardQueryError as exc:
+                raise DashboardQueryError(
+                    message="live dashboard query failed",
+                    error_type="live_dashboard_failed",
+                    source="service",
+                    status_code=exc.status_code,
+                    extra={
+                        "customer_name": selected_customer or "ALL",
+                        "host": host or "ALL",
+                        "date_from": date_from,
+                        "date_to": date_to,
+                        "top_bots": top_bots,
+                        "top_pages": top_pages,
+                        "cause": exc.to_dict(),
+                    },
+                ) from exc
         self._ensure_fresh_daily_sync()
         where_sql, params = self._build_filter_sql(selected_customer, host, date_from, date_to, exclude_sensitive_pages)
         previous_window = self._calc_previous_window(date_from, date_to)
@@ -1138,6 +1161,12 @@ class AnalyticsService:
             end_utc=end_utc,
             limit=8,
         )
+        weekly_comparison = self.generate_weekly_comparison(
+            customer_name=customer,
+            host=host,
+            date_from=date_from,
+            date_to=date_to,
+        )
 
         focused = current["focused"]
         prev_focused = previous.get("focused", {})
@@ -1207,6 +1236,7 @@ class AnalyticsService:
 
         latest = trend_rows[-1] if trend_rows else {}
         ai_category_rankings = current.get("ai_category_rankings", {"ai_search": [], "ai_training": [], "ai_index": []})
+        unknown_bot_rankings = current.get("unknown_bot_rankings", [])
         top_bots_rows = []
         for key in ("ai_search", "ai_training", "ai_index"):
             for item in ai_category_rankings.get(key, []):
@@ -1291,7 +1321,9 @@ class AnalyticsService:
                 "other_ai_referred_share_ratio_pct": self._calc_share_pct(referred_other, referred_total),
             },
             "human_referred_trend": human_referred_trend_rows,
+            "weekly_comparison": weekly_comparison,
             "ai_category_rankings": ai_category_rankings,
+            "unknown_bot_rankings": unknown_bot_rankings,
             "top_bots": top_bots_rows,
             "top_pages": current.get("page_ranking", []),
             "page_ranking": current.get("page_ranking", []),
@@ -1382,7 +1414,9 @@ class AnalyticsService:
                 "other_ai_referred_share_ratio_pct": 0.0,
             },
             "human_referred_trend": [],
+            "weekly_comparison": {"title_label": customer or "ALL", "weeks": [], "note": ""},
             "ai_category_rankings": {"ai_search": [], "ai_training": [], "ai_index": []},
+            "unknown_bot_rankings": [],
             "top_bots": [],
             "top_pages": [],
             "page_ranking": [],

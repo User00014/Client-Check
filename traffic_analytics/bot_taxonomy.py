@@ -312,6 +312,27 @@ def infer_bot_name_from_ua(user_agent: str | None) -> str:
     return "UnknownBot"
 
 
+def infer_bot_signal_from_ua(user_agent: str | None) -> str:
+    ua = _normalize_text(user_agent)
+    if not ua or ua == "-":
+        return ""
+    ua_lower = ua.lower()
+    taxonomy = load_bot_taxonomy()
+    for entry in taxonomy.entries:
+        if entry.token and entry.token in ua_lower:
+            return entry.token
+    for token in UNCLASSIFIED_BOT_HINT_TOKENS:
+        if token in ua_lower:
+            return token
+    for token in BOT_NAME_RE.findall(ua):
+        lowered = token.lower()
+        if lowered in BOT_NAME_IGNORE:
+            continue
+        if any(hint in lowered for hint in BOT_NAME_HINTS):
+            return token
+    return ""
+
+
 def is_official_bot_ua(user_agent: str | None) -> bool:
     ua = _normalize_text(user_agent).lower()
     if not ua or ua == "-":

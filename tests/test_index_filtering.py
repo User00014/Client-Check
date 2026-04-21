@@ -56,6 +56,19 @@ def test_list_index_options_uses_real_indices_and_skips_www_tecdo() -> None:
     assert rows[1]["label"] == "nginx-prelogs-tec-do-pre-2026.04.07"
 
 
+def test_shopify_scope_requires_pure_shopify_indices() -> None:
+    source = KibanaRemoteLogSource()
+    assert source._is_shopify_scope(["nginx-logs-shopify.deeplumen.io-2026.04.07"]) is True
+    assert source._is_shopify_scope([
+        "nginx-logs-shopify.deeplumen.io-2026.04.07",
+        "nginx-logs-shopify2.deeplumen.cn-2026.04.07",
+    ]) is True
+    assert source._is_shopify_scope([
+        "nginx-logs-shopify.deeplumen.io-2026.04.07",
+        "nginx-logs-moseeker-2026.04.07",
+    ]) is False
+
+
 def test_parse_index_name_splits_customer_and_date() -> None:
     assert parse_index_name("nginx-logs-moseeker-2026.04.01") == {
         "index_prefix": "nginx-logs",

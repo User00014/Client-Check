@@ -130,5 +130,5 @@ def test_unlisted_bot_goes_to_ai_unclassified() -> None:
         referer="-",
         user_agent="Mozilla/5.0 (compatible; NewCrawlerBot/2.0; +https://example.com/bot)",
     )
-    assert result["category"] == "seo_bot"
-    assert result["channel"] == "Others"
+    assert result["category"] == "unknown_bot"
+    assert result["channel"] == "NewCrawlerBot"
