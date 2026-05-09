@@ -522,6 +522,93 @@
       color: var(--muted);
       min-width: 220px;
     }
+    .report-health {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(122, 104, 83, 0.12);
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+    .health-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.9);
+      border: 1px solid rgba(122, 104, 83, 0.12);
+      font-weight: 700;
+      color: var(--text);
+    }
+    .health-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+      background: #b9b9b9;
+    }
+    .health-ok .health-dot {
+      background: #6ea483;
+    }
+    .health-bad .health-dot {
+      background: #c77767;
+    }
+    .report-guide {
+      width: 100%;
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.72);
+      border: 1px dashed rgba(122, 104, 83, 0.16);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.9;
+    }
+    .report-guide strong {
+      color: var(--text);
+    }
+    .report-progress {
+      width: 100%;
+      display: none;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .report-progress.active {
+      display: grid;
+    }
+    .report-progress-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .report-progress-track {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(122, 104, 83, 0.12);
+      overflow: hidden;
+      border: 1px solid rgba(122, 104, 83, 0.08);
+    }
+    .report-progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--teal), var(--yellow));
+      box-shadow: 0 4px 10px rgba(74, 114, 121, 0.22);
+      transition: width 260ms ease;
+    }
     .weekly-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -532,7 +619,7 @@
       border-radius: 18px;
       padding: 16px;
       background: rgba(255,255,255,0.74);
-      overflow: hidden;
+      overflow: visible;
     }
     .weekly-box-title {
       font-size: 13px;
@@ -544,12 +631,12 @@
       align-items: flex-end;
       justify-content: flex-start;
       gap: 24px;
-      min-height: 220px;
+      min-height: 0;
       padding: 10px 8px 6px;
     }
     .weekly-scroll {
       overflow-x: auto;
-      overflow-y: hidden;
+      overflow-y: visible;
       padding-bottom: 4px;
     }
     .weekly-bar-col {
@@ -568,6 +655,37 @@
       width: 100%;
       border-radius: 16px 16px 6px 6px;
       min-height: 10px;
+      position: relative;
+      cursor: default;
+    }
+    .weekly-bar[data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 10px);
+      transform: translateX(-50%);
+      background: rgba(36, 52, 59, 0.94);
+      color: #fff;
+      padding: 6px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: nowrap;
+      box-shadow: 0 10px 24px rgba(20, 28, 33, 0.28);
+      z-index: 6;
+      pointer-events: none;
+    }
+    .weekly-bar[data-tip]:hover::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 4px);
+      transform: translateX(-50%);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid rgba(36, 52, 59, 0.94);
+      z-index: 6;
+      pointer-events: none;
     }
     .weekly-bar-label {
       margin-top: 10px;
@@ -587,6 +705,137 @@
       color: var(--muted);
       line-height: 1.8;
     }
+    .table-head-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .table-head-row .table-head {
+      margin-bottom: 0;
+    }
+    .compact-btn {
+      width: auto;
+      min-width: 92px;
+      padding: 9px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      box-shadow: none;
+    }
+    .inline-bot-action {
+      display: grid;
+      grid-template-columns: minmax(132px, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-width: 232px;
+    }
+    .inline-bot-action select {
+      padding: 9px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+    .inline-bot-action button {
+      padding: 9px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(29, 39, 43, 0.38);
+      backdrop-filter: blur(10px);
+    }
+    .modal-backdrop.active {
+      display: flex;
+    }
+    .modal-panel {
+      width: min(1120px, 100%);
+      max-height: min(82vh, 820px);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.97), rgba(250,247,242,0.95)),
+        linear-gradient(145deg, rgba(233,220,199,0.14), rgba(125,162,149,0.08));
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      box-shadow: 0 34px 86px rgba(29, 39, 43, 0.28);
+      overflow: hidden;
+    }
+    .modal-head,
+    .modal-foot {
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid rgba(122, 104, 83, 0.12);
+    }
+    .modal-foot {
+      border-top: 1px solid rgba(122, 104, 83, 0.12);
+      border-bottom: 0;
+      justify-content: flex-end;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .modal-body {
+      overflow: auto;
+      padding: 18px 20px 22px;
+    }
+    .taxonomy-table select {
+      min-width: 168px;
+      padding: 9px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+    .taxonomy-token {
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 12px;
+      color: #4d5d63;
+      word-break: break-all;
+    }
+    .taxonomy-status {
+      flex: 1 1 auto;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .bot-toast {
+      position: fixed;
+      right: 28px;
+      bottom: 28px;
+      z-index: 30;
+      min-width: 260px;
+      max-width: min(420px, calc(100vw - 40px));
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(36, 52, 59, 0.94);
+      color: #fff;
+      box-shadow: 0 22px 48px rgba(36, 52, 59, 0.22);
+      font-size: 13px;
+      line-height: 1.7;
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+      backdrop-filter: blur(10px);
+    }
+    .bot-toast.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .bot-toast.error {
+      background: rgba(151, 73, 62, 0.96);
+    }
     @media (max-width: 1280px) {
       .toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .grid-two { grid-template-columns: 1fr; }
@@ -598,6 +847,7 @@
       .shell { padding: 22px 16px 34px; }
       .toolbar, .sub-grid, .sub-grid.three { grid-template-columns: 1fr; }
       .metric-value.big { font-size: 36px; }
+      .inline-bot-action { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -661,7 +911,34 @@
       <div class="report-actions">
         <button id="generateReportBtn">生成报告</button>
         <button id="downloadReportBtn" class="ghost-btn" disabled>下载报告</button>
+        <button id="downloadHelperBtn" class="ghost-btn" type="button">下载本地结论服务</button>
+        <button id="checkHelperBtn" class="ghost-btn" type="button">检测连接</button>
         <div class="report-status" id="reportStatus">尚未生成报告</div>
+        <div class="report-progress" id="reportProgress">
+          <div class="report-progress-meta">
+            <span id="reportProgressLabel">等待开始</span>
+            <span id="reportProgressPercent">0%</span>
+          </div>
+          <div class="report-progress-track">
+            <div class="report-progress-fill" id="reportProgressFill"></div>
+          </div>
+        </div>
+        <div class="report-health" id="reportHealth">
+          <span class="health-chip" id="helperStatusChip"><span class="health-dot"></span>本地结论服务：未检测</span>
+          <span class="health-chip" id="llmStatusChip"><span class="health-dot"></span>LLM：未检测</span>
+          <span id="llmStatusText">点击“检测连接”后查看当前状态</span>
+        </div>
+        <div class="report-guide">
+          <strong>使用说明：</strong>
+          <strong>当前推荐用法：</strong>
+          1. 先在本机双击 <code>LocalReportLLM_Helper/start_local_report_llm.bat</code> 启动本地结论服务。
+          2. 启动成功后刷新当前页面。
+          3. 直接点击 <code>生成报告</code>，系统会先生成统计草稿，再调用本机结论服务补充总结段，最后提供 Word 下载。
+          <strong>补充说明：</strong>
+          1. 更换电脑时，可直接点击上方 <code>下载本地结论服务</code> 按钮获取整个 <code>LocalReportLLM_Helper</code> 压缩包。
+          2. 该 bat 会自动检查 Python 3.12+，如缺少且系统支持 winget，会尝试自动安装。
+          3. 如果本地结论服务没有启动，报告仍然可以生成，但总结段会退回规则文案。
+        </div>
       </div>
     </section>
 
@@ -741,12 +1018,32 @@
 
     <section class="section">
       <div class="table-card">
-        <div class="table-head">Unknown Bot</div>
+        <div class="table-head-row">
+          <div class="table-head">Unknown Bot</div>
+          <button id="openBotTaxonomyBtn" class="ghost-btn compact-btn" type="button">维护分类表</button>
+        </div>
         <div id="unknownBotRanking"></div>
       </div>
     </section>
 
+    <div class="modal-backdrop" id="botTaxonomyModal" aria-hidden="true">
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="botTaxonomyTitle">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title" id="botTaxonomyTitle">Bot 分类表</div>
+            <div class="taxonomy-status" id="botTaxonomyStatus">正在读取分类表...</div>
+          </div>
+          <button id="closeBotTaxonomyBtn" class="ghost-btn compact-btn" type="button">关闭</button>
+        </div>
+        <div class="modal-body" id="botTaxonomyBody"></div>
+        <div class="modal-foot">
+          <button id="reloadBotTaxonomyBtn" class="ghost-btn compact-btn" type="button">刷新</button>
+        </div>
+      </div>
+    </div>
+
     <div class="footer" id="footerText">加载中...</div>
+    <div class="bot-toast" id="botToast" role="status" aria-live="polite"></div>
   </div>
 
   <script>
@@ -761,7 +1058,17 @@
       refreshBtn: document.getElementById('refreshBtn'),
       generateReportBtn: document.getElementById('generateReportBtn'),
       downloadReportBtn: document.getElementById('downloadReportBtn'),
+      downloadHelperBtn: document.getElementById('downloadHelperBtn'),
+      checkHelperBtn: document.getElementById('checkHelperBtn'),
       reportStatus: document.getElementById('reportStatus'),
+      reportProgress: document.getElementById('reportProgress'),
+      reportProgressLabel: document.getElementById('reportProgressLabel'),
+      reportProgressPercent: document.getElementById('reportProgressPercent'),
+      reportProgressFill: document.getElementById('reportProgressFill'),
+      reportHealth: document.getElementById('reportHealth'),
+      helperStatusChip: document.getElementById('helperStatusChip'),
+      llmStatusChip: document.getElementById('llmStatusChip'),
+      llmStatusText: document.getElementById('llmStatusText'),
       humanBigCard: document.getElementById('humanBigCard'),
       humanSubCards: document.getElementById('humanSubCards'),
       humanComposition: document.getElementById('humanComposition'),
@@ -777,6 +1084,13 @@
       pageRanking: document.getElementById('pageRanking'),
       accessRecords: document.getElementById('accessRecords'),
       unknownBotRanking: document.getElementById('unknownBotRanking'),
+      openBotTaxonomyBtn: document.getElementById('openBotTaxonomyBtn'),
+      botTaxonomyModal: document.getElementById('botTaxonomyModal'),
+      botTaxonomyBody: document.getElementById('botTaxonomyBody'),
+      botTaxonomyStatus: document.getElementById('botTaxonomyStatus'),
+      closeBotTaxonomyBtn: document.getElementById('closeBotTaxonomyBtn'),
+      reloadBotTaxonomyBtn: document.getElementById('reloadBotTaxonomyBtn'),
+      botToast: document.getElementById('botToast'),
       footerText: document.getElementById('footerText'),
     };
 
@@ -793,6 +1107,7 @@
       text: '#24343b'
     };
     const chartStates = new Map();
+    let botTaxonomy = { categories: [], entries: [] };
 
     function fmt(v) {
       return new Intl.NumberFormat('en-US').format(Number(v || 0));
@@ -816,15 +1131,37 @@
       return d.toISOString().slice(0, 10);
     }
 
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function explainFetchError(error, fallback = '请求失败') {
+      const message = String(error?.message || error || fallback);
+      if (/failed to fetch|load failed|networkerror/i.test(message)) {
+        return '请求被浏览器或中间代理中断。当前筛选范围可能查询时间较长，请缩短日期范围后重试，或稍后再刷新。';
+      }
+      return message;
+    }
+
     async function getJSON(url) {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = data?.detail?.message || data?.detail?.detail || data?.detail || data?.message || `HTTP ${res.status}`;
+        throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+      }
+      return data;
     }
 
     async function postJSON(url, payload) {
       const res = await fetch(url, {
         method: 'POST',
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
@@ -834,6 +1171,285 @@
         throw new Error(detail);
       }
       return data;
+    }
+
+    function categoryOptions(selected = '') {
+      return (botTaxonomy.categories || []).map(category => {
+        const safeCategory = escapeHtml(category);
+        return `<option value="${safeCategory}" ${category === selected ? 'selected' : ''}>${safeCategory}</option>`;
+      }).join('');
+    }
+
+    async function loadBotTaxonomy() {
+      botTaxonomy = await getJSON(`/bots/taxonomy?_ts=${Date.now()}`);
+      return botTaxonomy;
+    }
+
+    function showBotToast(message, isError = false) {
+      if (!el.botToast) return;
+      el.botToast.textContent = message;
+      el.botToast.classList.toggle('error', !!isError);
+      el.botToast.classList.add('active');
+      window.clearTimeout(el.botToast.dataset.timerId);
+      const timerId = window.setTimeout(() => {
+        el.botToast.classList.remove('active');
+      }, 2600);
+      el.botToast.dataset.timerId = String(timerId);
+    }
+
+    function botTokenFromUnknownRow(row) {
+      const platform = String(row?.platform || '').trim();
+      if (platform && platform.toLowerCase() !== 'unknownbot' && platform.toLowerCase() !== 'other bot') {
+        return platform.toLowerCase();
+      }
+      return String(row?.signal || '').trim().toLowerCase();
+    }
+
+    async function submitBotTaxonomy(payload, button, statusTarget) {
+      const originalText = button?.textContent || '';
+      if (button) {
+        button.disabled = true;
+        button.textContent = '提交中...';
+      }
+      try {
+        const result = await postJSON('/bots/taxonomy/upsert', payload);
+        await loadBotTaxonomy();
+        const message = `${result.created ? '已新增' : '已更新'}：${result.bot_name} -> ${result.category}，已重算 ${result.updated_requests || 0} 条本地记录`;
+        if (statusTarget) statusTarget.textContent = message;
+        el.footerText.textContent = message;
+        return result;
+      } catch (error) {
+        const message = explainFetchError(error, '提交失败');
+        if (statusTarget) statusTarget.textContent = message;
+        el.footerText.textContent = `Bot 分类提交失败：${message}`;
+        throw error;
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      }
+    }
+
+    function renderUnknownBotAction(row) {
+      const botName = String(row?.platform || '').trim();
+      const token = botTokenFromUnknownRow(row);
+      const disabled = !botName || !token || ['bot', 'spider', 'crawler', 'crawl', 'fetch', 'scan', 'scanner', 'agent'].includes(token);
+      return `
+        <div class="inline-bot-action">
+          <select data-unknown-category ${disabled ? 'disabled' : ''}>${categoryOptions('AI Search')}</select>
+          <button
+            type="button"
+            data-unknown-submit
+            data-bot-name="${escapeHtml(botName)}"
+            data-token="${escapeHtml(token)}"
+            data-sample-ua="${escapeHtml(row?.sample_ua || '')}"
+            ${disabled ? 'disabled' : ''}
+          >提交</button>
+        </div>
+      `;
+    }
+
+    function wireUnknownBotActions() {
+      el.unknownBotRanking.querySelectorAll('[data-unknown-submit]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const wrapper = button.closest('.inline-bot-action');
+          const select = wrapper?.querySelector('[data-unknown-category]');
+          const tableRow = button.closest('tr');
+          try {
+            const result = await submitBotTaxonomy({
+              bot_name: button.dataset.botName || '',
+              category: select?.value || 'AI Search',
+              sample_ua_token: button.dataset.token || '',
+              sample_ua: button.dataset.sampleUa || '',
+              note: '前端 Unknown Bot 归类',
+            }, button, el.footerText);
+            removeUnknownBotRow(tableRow);
+            showBotToast(`提交成功：${result.bot_name} 已归类为 ${result.category}`);
+          } catch (error) {
+            const message = explainFetchError(error, '提交失败');
+            showBotToast(`提交失败：${message}`, true);
+            window.alert(message);
+          }
+        });
+      });
+    }
+
+    function renderUnknownBotTable(rows) {
+      renderTable(el.unknownBotRanking, [
+        { key: 'platform', label: '平台 / Bot' },
+        { key: 'requests', label: '流量', render: (v) => fmt(v) },
+        { key: 'signal', label: '关键标识', render: (v) => v ? `<code>${escapeHtml(v)}</code>` : '-' },
+        { key: 'sample_ua', label: '示例 UA', render: (v) => v ? `<div class="ua-cell">${escapeHtml(v)}</div>` : '-' },
+        { key: 'action', label: '归类', render: (_v, row) => renderUnknownBotAction(row) }
+      ], rows || [], '暂无 Unknown Bot 数据');
+      wireUnknownBotActions();
+    }
+
+    function removeUnknownBotRow(tableRow) {
+      if (!tableRow) return;
+      const tbody = tableRow.parentElement;
+      tableRow.remove();
+      if (!tbody || tbody.children.length > 0) return;
+      const table = tbody.closest('table');
+      if (table) {
+        el.unknownBotRanking.innerHTML = '<div class="empty">暂无 Unknown Bot 数据</div>';
+      }
+    }
+
+    function renderBotTaxonomyModal() {
+      const rows = botTaxonomy.entries || [];
+      el.botTaxonomyStatus.textContent = `当前分类表共 ${rows.length} 个 Bot，可直接调整分类后提交。`;
+      if (!rows.length) {
+        el.botTaxonomyBody.innerHTML = '<div class="empty">分类表暂无数据</div>';
+        return;
+      }
+      const body = rows.map(row => `
+        <tr>
+          <td><strong>${escapeHtml(row.bot_name)}</strong></td>
+          <td><span class="taxonomy-token">${escapeHtml(row.sample_ua_token)}</span></td>
+          <td>
+            <select data-taxonomy-category>${categoryOptions(row.category)}</select>
+          </td>
+          <td>
+            <button
+              type="button"
+              class="compact-btn"
+              data-taxonomy-submit
+              data-bot-name="${escapeHtml(row.bot_name)}"
+              data-token="${escapeHtml(row.sample_ua_token)}"
+            >提交</button>
+          </td>
+        </tr>
+      `).join('');
+      el.botTaxonomyBody.innerHTML = `
+        <table class="taxonomy-table">
+          <thead>
+            <tr>
+              <th>Bot</th>
+              <th>识别 token</th>
+              <th>分类</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+      el.botTaxonomyBody.querySelectorAll('[data-taxonomy-submit]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const row = button.closest('tr');
+          const select = row?.querySelector('[data-taxonomy-category]');
+          try {
+            const result = await submitBotTaxonomy({
+              bot_name: button.dataset.botName || '',
+              category: select?.value || '',
+              sample_ua_token: button.dataset.token || '',
+              note: '前端分类表维护',
+            }, button, el.botTaxonomyStatus);
+            showBotToast(`提交成功：${result.bot_name} 已更新为 ${result.category}`);
+            await loadBotTaxonomy();
+            renderBotTaxonomyModal();
+          } catch (error) {
+            const message = explainFetchError(error, '提交失败');
+            showBotToast(`提交失败：${message}`, true);
+            window.alert(message);
+          }
+        });
+      });
+    }
+
+    async function openBotTaxonomyModal() {
+      el.botTaxonomyModal.classList.add('active');
+      el.botTaxonomyModal.setAttribute('aria-hidden', 'false');
+      el.botTaxonomyStatus.textContent = '正在读取分类表...';
+      el.botTaxonomyBody.innerHTML = '<div class="empty">加载中...</div>';
+      try {
+        await loadBotTaxonomy();
+        renderBotTaxonomyModal();
+      } catch (error) {
+        el.botTaxonomyStatus.textContent = `读取失败：${explainFetchError(error)}`;
+        el.botTaxonomyBody.innerHTML = '<div class="empty">分类表读取失败</div>';
+      }
+    }
+
+    function closeBotTaxonomyModal() {
+      el.botTaxonomyModal.classList.remove('active');
+      el.botTaxonomyModal.setAttribute('aria-hidden', 'true');
+    }
+
+    async function checkLocalSummaryService() {
+      try {
+        const res = await fetch(`http://127.0.0.1:18181/ping?_ts=${Date.now()}`, {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        if (!res.ok) return false;
+        const data = await res.json().catch(() => ({}));
+        return data?.ok === true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    async function checkLlmConnection() {
+      try {
+        const res = await fetch(`http://127.0.0.1:18181/check-llm?_ts=${Date.now()}`, {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ llm_config: {} })
+        });
+        const data = await res.json().catch(() => ({}));
+        return {
+          ok: !!data?.ok,
+          detail: data?.detail || '',
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          detail: error.message || '连接检查失败',
+        };
+      }
+    }
+
+    function renderReportHealth(helperOk, llmOk, detail = '') {
+      el.helperStatusChip.className = `health-chip ${helperOk ? 'health-ok' : 'health-bad'}`;
+      el.helperStatusChip.innerHTML = `<span class="health-dot"></span>本地结论服务：${helperOk ? '已连接' : '未连接'}`;
+      el.llmStatusChip.className = `health-chip ${llmOk ? 'health-ok' : 'health-bad'}`;
+      el.llmStatusChip.innerHTML = `<span class="health-dot"></span>LLM：${llmOk ? '可用' : '不可用'}`;
+      el.llmStatusText.textContent = detail || (helperOk ? '本地结论服务已启动，可继续检测 LLM 状态' : '请先启动本地结论服务');
+    }
+
+    async function tryGenerateLocalSummary(llmContext) {
+      try {
+        const res = await fetch(`http://127.0.0.1:18181/report-summary?_ts=${Date.now()}`, {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ llm_context: llmContext })
+        });
+        if (!res.ok) return null;
+        const data = await res.json().catch(() => ({}));
+        return data || null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function setReportProgress(percent, label, active = true) {
+      const safePercent = Math.max(0, Math.min(100, Number(percent || 0)));
+      el.reportProgress.classList.toggle('active', !!active);
+      el.reportProgressFill.style.width = `${safePercent}%`;
+      el.reportProgressPercent.textContent = `${Math.round(safePercent)}%`;
+      el.reportProgressLabel.textContent = label || '处理中...';
+    }
+
+    function resetReportProgress() {
+      setReportProgress(0, '等待开始', false);
     }
 
     function setSelectOptions(selectEl, options, preferredValue, fallbackValue = 'ALL') {
@@ -964,8 +1580,8 @@
       const selectedSeries = config.series.filter(item => state.selectedKeys.includes(item.key));
       const activeSeries = selectedSeries.length ? selectedSeries : config.series.slice(0, 1);
       const width = Math.max(container.clientWidth - 18, 620);
-      const height = 310;
-      const pad = { top: 20, right: 22, bottom: 42, left: 58 };
+      const height = 352;
+      const pad = { top: 20, right: 22, bottom: 86, left: 58 };
       const plotW = width - pad.left - pad.right;
       const plotH = height - pad.top - pad.bottom;
       const maxY = Math.max(...visibleRows.flatMap(r => activeSeries.map(s => Number(r[s.key] || 0))), 1);
@@ -981,7 +1597,12 @@
 
       const xLabels = visibleRows.map((row, idx) => {
         const x = pad.left + idx * xStep;
-        return `<text x="${x}" y="${height - 10}" font-size="11" text-anchor="middle" fill="#7a8797">${row.date.slice(5)}</text>`;
+        const label = String(row.date || '').slice(5);
+        const chars = label.split('');
+        const tspans = chars.map((char, charIdx) => (
+          `<tspan x="${x}" dy="${charIdx === 0 ? 0 : 11}">${escapeHtml(char)}</tspan>`
+        )).join('');
+        return `<text x="${x}" y="${height - pad.bottom + 16}" font-size="10.5" text-anchor="middle" fill="#7a8797">${tspans}</text>`;
       }).join('');
 
       const grid = Array.from({ length: 5 }, (_, idx) => {
@@ -1260,13 +1881,21 @@
       const maxGrouped = Math.max(...weeks.flatMap(week => [week.ai_daily_avg, week.seo_daily_avg]), 1);
       const palette = [colors.total, colors.aiIndex, colors.aiSearch, colors.aiTraining, colors.humanPlatform, colors.humanTraditional];
       const shortRange = (week) => `${String(week.start || '').slice(5)}~${String(week.end || '').slice(5)}`;
+      const singleValueStrings = weeks.flatMap(week => [fmt(week.total), Number(week.daily_avg || 0).toFixed(1)]);
+      const groupedValueStrings = weeks.flatMap(week => [Number(week.ai_daily_avg || 0).toFixed(1), Number(week.seo_daily_avg || 0).toFixed(1)]);
+      const singleLabelPad = Math.max(34, Math.min(62, Math.max(...singleValueStrings.map(text => text.length), 4) * 4.2));
+      const groupedLabelPad = Math.max(34, Math.min(62, Math.max(...groupedValueStrings.map(text => text.length), 4) * 4.2));
+      const singleChartHeight = Math.max(190, Math.min(280, 176 + weeks.length * 8));
+      const groupedChartHeight = Math.max(180, Math.min(260, 164 + weeks.length * 7));
+      const singleBarMaxHeight = Math.max(118, singleChartHeight - singleLabelPad - 22);
+      const groupedBarMaxHeight = Math.max(112, groupedChartHeight - groupedLabelPad - 18);
       const singleBars = (valueKey, formatter, subFormatter) => `
         <div class="weekly-scroll">
-          <div class="weekly-bars" style="min-width:${Math.max(weeks.length * 108, 320)}px;">
+          <div class="weekly-bars" style="min-width:${Math.max(weeks.length * 108, 320)}px;min-height:${singleChartHeight}px;padding-top:${Math.max(12, singleLabelPad - 18)}px;">
           ${weeks.map((week, idx) => `
             <div class="weekly-bar-col">
               <div class="weekly-bar-value">${formatter(week[valueKey])}</div>
-              <div class="weekly-bar" style="height:${Math.max(12, Number(week[valueKey]) / maxSingle * 170)}px;background:${palette[idx % palette.length]};"></div>
+              <div class="weekly-bar" title="${week.label} ${shortRange(week)}: ${formatter(week[valueKey])}" data-tip="${week.label} ${shortRange(week)}: ${formatter(week[valueKey])}" style="height:${Math.max(12, Number(week[valueKey]) / maxSingle * singleBarMaxHeight)}px;background:${palette[idx % palette.length]};"></div>
               <div class="weekly-bar-label">${week.label}</div>
               <div class="weekly-bar-sub">${subFormatter(week)}</div>
             </div>
@@ -1276,17 +1905,17 @@
       `;
       const groupedBars = `
         <div class="weekly-scroll">
-          <div class="weekly-bars" style="gap:16px;align-items:flex-end;min-width:${Math.max(weeks.length * 138, 320)}px;">
+          <div class="weekly-bars" style="gap:16px;align-items:flex-end;min-width:${Math.max(weeks.length * 138, 320)}px;min-height:${groupedChartHeight}px;padding-top:${Math.max(12, groupedLabelPad - 18)}px;">
           ${[
             { label: 'AI Total', key: 'ai_daily_avg' },
             { label: 'SEO Bot', key: 'seo_daily_avg' },
           ].map((group) => `
             <div class="weekly-bar-col" style="width:${Math.max(120, weeks.length * 58)}px;">
-              <div style="display:flex;align-items:flex-end;justify-content:center;gap:10px;height:180px;">
+              <div style="display:flex;align-items:flex-end;justify-content:center;gap:10px;height:${groupedChartHeight - 10}px;">
                 ${weeks.map((week, idx) => `
                   <div style="width:42px;text-align:center;">
                     <div class="weekly-bar-value">${Number(week[group.key] || 0).toFixed(1)}</div>
-                    <div class="weekly-bar" style="height:${Math.max(12, Number(week[group.key]) / maxGrouped * 160)}px;background:${palette[idx % palette.length]};"></div>
+                    <div class="weekly-bar" title="${group.label} | ${week.label} ${shortRange(week)}: ${Number(week[group.key] || 0).toFixed(1)}" data-tip="${group.label} | ${week.label} ${shortRange(week)}: ${Number(week[group.key] || 0).toFixed(1)}" style="height:${Math.max(12, Number(week[group.key]) / maxGrouped * groupedBarMaxHeight)}px;background:${palette[idx % palette.length]};"></div>
                     <div class="weekly-bar-sub">${week.label}</div>
                   </div>
                 `).join('')}
@@ -1322,7 +1951,8 @@
       if (el.customerName.value && el.customerName.value !== 'ALL') params.set('customer_name', el.customerName.value);
       if (el.dateFrom.value) params.set('date_from', el.dateFrom.value);
       if (el.dateTo.value) params.set('date_to', el.dateTo.value);
-      const payload = await getJSON(`/frontend/filters${params.toString() ? `?${params.toString()}` : ''}`);
+      params.set('_ts', String(Date.now()));
+      const payload = await getJSON(`/frontend/filters?${params.toString()}`);
       const customers = payload.customers || [];
       const hosts = payload.hosts || [];
       setSelectOptions(el.customerName, customers, el.customerName.value || payload.defaults?.customer_name || 'ALL');
@@ -1374,7 +2004,11 @@
       applyPreset();
       el.refreshBtn.disabled = true;
       el.refreshBtn.textContent = '加载中...';
+      el.footerText.textContent = '正在加载面板数据...';
       try {
+        if (!botTaxonomy.categories.length) {
+          await loadBotTaxonomy();
+        }
         const params = new URLSearchParams({
           customer_name: el.customerName.value || 'ALL',
           host: el.host.value || 'ALL',
@@ -1383,6 +2017,7 @@
           top_bots: el.topBots.value,
           top_pages: el.topPages.value
         });
+        params.set('_ts', String(Date.now()));
         const data = await getJSON(`/frontend/dashboard?${params.toString()}`);
         const human = data.human_summary || {};
         const humanReferred = data.human_referred_summary || {};
@@ -1486,12 +2121,7 @@
         renderTable(el.aiSearchRanking, rankingColumns, rankings.ai_search || [], '暂无 AI Search 平台数据');
         renderTable(el.aiTrainingRanking, rankingColumns, rankings.ai_training || [], '暂无 AI Training 平台数据');
         renderTable(el.aiIndexRanking, rankingColumns, rankings.ai_index || [], '暂无 AI Index 平台数据');
-        renderTable(el.unknownBotRanking, [
-          { key: 'platform', label: '平台 / Bot' },
-          { key: 'requests', label: '流量', render: (v) => fmt(v) },
-          { key: 'signal', label: '关键标识', render: (v) => v ? `<code>${v}</code>` : '-' },
-          { key: 'sample_ua', label: '示例 UA', render: (v) => v ? `<div class="ua-cell">${v}</div>` : '-' }
-        ], data.unknown_bot_rankings || [], '暂无 Unknown Bot 数据');
+        renderUnknownBotTable(data.unknown_bot_rankings || []);
 
         renderTable(el.pageRanking, [
           { key: 'page', label: '页面' },
@@ -1511,15 +2141,18 @@
 
         el.footerText.textContent = `客户=${data.meta?.customer_name || 'ALL'} | Host=${data.meta?.host || 'ALL'} | 时间范围=${data.meta?.date_from || '-'} ~ ${data.meta?.date_to || '-'} | Top Bots=${data.meta?.top_bots || '-'} | Top Pages=${data.meta?.top_pages || '-'} | 当前按总用户流量 + AI Referred 拆分 + AI Bot + AI 页面排行口径展示`;
       } catch (error) {
-        el.humanTrend.innerHTML = `<div class="empty">加载失败：${error.message}</div>`;
-        el.aiTrend.innerHTML = `<div class="empty">加载失败：${error.message}</div>`;
-        el.aiSearchRanking.innerHTML = `<div class="empty">加载失败</div>`;
-        el.aiTrainingRanking.innerHTML = `<div class="empty">加载失败</div>`;
-        el.aiIndexRanking.innerHTML = `<div class="empty">加载失败</div>`;
-        el.pageRanking.innerHTML = `<div class="empty">加载失败</div>`;
-        el.accessRecords.innerHTML = `<div class="empty">加载失败</div>`;
-        el.unknownBotRanking.innerHTML = `<div class="empty">加载失败</div>`;
-        el.weeklyComparison.innerHTML = `<div class="empty">加载失败</div>`;
+        const message = explainFetchError(error, '加载失败');
+        const safeMessage = escapeHtml(message);
+        el.humanTrend.innerHTML = `<div class="empty">加载失败：${safeMessage}</div>`;
+        el.aiTrend.innerHTML = `<div class="empty">加载失败：${safeMessage}</div>`;
+        el.aiSearchRanking.innerHTML = `<div class="empty">加载失败：${safeMessage}</div>`;
+        el.aiTrainingRanking.innerHTML = `<div class="empty">加载失败：${safeMessage}</div>`;
+        el.aiIndexRanking.innerHTML = `<div class="empty">加载失败：${safeMessage}</div>`;
+        el.pageRanking.innerHTML = `<div class="empty">加载失败：${safeMessage}</div>`;
+        el.accessRecords.innerHTML = `<div class="empty">加载失败：${safeMessage}</div>`;
+        el.unknownBotRanking.innerHTML = `<div class="empty">加载失败：${safeMessage}</div>`;
+        el.weeklyComparison.innerHTML = `<div class="empty">加载失败：${safeMessage}</div>`;
+        el.footerText.textContent = `加载失败：${message}`;
       } finally {
         el.refreshBtn.disabled = false;
         el.refreshBtn.textContent = '刷新面板';
@@ -1544,9 +2177,26 @@
     });
     el.topBots.addEventListener('change', () => showIdleState());
     el.topPages.addEventListener('change', () => showIdleState());
+    el.openBotTaxonomyBtn.addEventListener('click', openBotTaxonomyModal);
+    el.closeBotTaxonomyBtn.addEventListener('click', closeBotTaxonomyModal);
+    el.reloadBotTaxonomyBtn.addEventListener('click', async () => {
+      el.botTaxonomyStatus.textContent = '正在刷新分类表...';
+      await loadBotTaxonomy();
+      renderBotTaxonomyModal();
+    });
+    el.botTaxonomyModal.addEventListener('click', (event) => {
+      if (event.target === el.botTaxonomyModal) closeBotTaxonomyModal();
+    });
     el.refreshBtn.addEventListener('click', async () => {
       applyPreset();
-      await loadFilters();
+      el.refreshBtn.disabled = true;
+      el.refreshBtn.textContent = '加载中...';
+      el.footerText.textContent = '正在更新筛选项并加载面板...';
+      try {
+        await loadFilters();
+      } catch (error) {
+        el.footerText.textContent = `筛选项更新失败，继续按当前条件加载面板：${explainFetchError(error)}`;
+      }
       await loadDashboard();
     });
     el.generateReportBtn.addEventListener('click', async () => {
@@ -1556,17 +2206,37 @@
       el.downloadReportBtn.disabled = true;
       el.downloadReportBtn.dataset.url = '';
       el.reportStatus.textContent = '正在生成报告，请稍候...';
+      setReportProgress(8, '正在整理筛选条件...');
       try {
-        const result = await postJSON('/frontend/report', {
+        const payload = {
           customer_name: el.customerName.value || 'ALL',
           host: el.host.value || 'ALL',
           date_from: el.dateFrom.value,
           date_to: el.dateTo.value,
+        };
+        setReportProgress(22, '正在获取报告上下文...');
+        const contextResult = await postJSON('/frontend/report/context', payload);
+        setReportProgress(52, '正在调用本地结论服务...');
+        const llmSections = await tryGenerateLocalSummary(contextResult.llm_context);
+        const summaryText = llmSections?.summary_text || null;
+        if (!summaryText) {
+          el.reportStatus.textContent = '本地结论服务不可用，正在使用规则结论继续生成...';
+          setReportProgress(68, '本地结论服务不可用，正在使用规则结论...');
+        } else {
+          setReportProgress(72, '已获取结论，正在生成 Word 报告...');
+        }
+        setReportProgress(84, '服务器正在生成 Word 报告...');
+        const result = await postJSON('/frontend/report', {
+          ...payload,
+          summary_text: summaryText,
+          llm_sections: llmSections,
         });
         el.downloadReportBtn.disabled = false;
         el.downloadReportBtn.dataset.url = result.download_url || '';
+        setReportProgress(100, '报告已生成，可直接下载。');
         el.reportStatus.textContent = `报告已生成：${result.filename || ''}`;
       } catch (error) {
+        setReportProgress(100, '生成失败', true);
         el.reportStatus.textContent = `生成失败：${error.message}`;
       } finally {
         el.generateReportBtn.disabled = false;
@@ -1578,11 +2248,36 @@
       if (!url) return;
       window.location.href = url;
     });
+    el.downloadHelperBtn.addEventListener('click', () => {
+      window.location.href = '/frontend/helper/download';
+    });
+    el.checkHelperBtn.addEventListener('click', async () => {
+      el.llmStatusText.textContent = '正在检测本地结论服务与 LLM 连接...';
+      const helperOk = await checkLocalSummaryService();
+      if (!helperOk) {
+        renderReportHealth(false, false, '本地结论服务未启动或不可访问，请先启动 bat。');
+        return;
+      }
+      const llm = await checkLlmConnection();
+      renderReportHealth(true, !!llm.ok, llm.detail || (llm.ok ? 'LLM 连接正常' : 'LLM 连接失败'));
+    });
 
     (async function init() {
-      await loadFilters({ applyDefaultDates: true });
-      applyPreset();
-      showIdleState('筛选项已就绪，点击“刷新面板”开始加载数据');
+      try {
+        await loadFilters({ applyDefaultDates: true });
+        await loadBotTaxonomy();
+        applyPreset();
+      } catch (error) {
+        showIdleState(`筛选项加载失败：${explainFetchError(error)}`);
+      }
+      resetReportProgress();
+      const helperReady = await checkLocalSummaryService();
+      renderReportHealth(helperReady, false, helperReady ? '本地结论服务已连接，可点击“检测连接”测试 LLM。' : '请先启动本地结论服务，再点击“检测连接”。');
+      if (!el.footerText.textContent.includes('失败')) {
+        showIdleState(helperReady
+          ? '筛选项已就绪，本地结论服务已连接，点击“刷新面板”开始加载数据'
+          : '筛选项已就绪。如需大模型结论，请双击启动本地结论服务后再生成报告');
+      }
     })();
   </script>
 </body>

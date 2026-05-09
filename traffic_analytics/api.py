@@ -21,6 +21,16 @@ class GenerateReportRequest(BaseModel):
     host: str | None = None
     date_from: str
     date_to: str
+    summary_text: str | None = None
+    llm_sections: dict[str, Any] | None = None
+
+
+class BotTaxonomyUpsertRequest(BaseModel):
+    bot_name: str
+    category: str
+    sample_ua_token: str
+    sample_ua: str | None = None
+    note: str | None = None
 
 
 @asynccontextmanager
@@ -55,6 +65,23 @@ def create_app(service: AnalyticsService | None = None) -> FastAPI:
     def bot_catalog() -> list[dict[str, Any]]:
         return analytics_service.get_bot_catalog()
 
+    @app.get("/bots/taxonomy")
+    def bot_taxonomy() -> dict[str, Any]:
+        return analytics_service.get_bot_taxonomy()
+
+    @app.post("/bots/taxonomy/upsert")
+    def bot_taxonomy_upsert(payload: BotTaxonomyUpsertRequest) -> dict[str, Any]:
+        try:
+            return analytics_service.upsert_bot_taxonomy(
+                bot_name=payload.bot_name,
+                category=payload.category,
+                sample_ua_token=payload.sample_ua_token,
+                sample_ua=payload.sample_ua or "",
+                note=payload.note or "",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/increment/snapshot")
     def increment_snapshot(limit: int | None = Query(default=None, ge=1, le=5000)) -> dict[str, Any]:
         return analytics_service.get_increment_snapshot(limit=limit)
@@ -77,6 +104,14 @@ def create_app(service: AnalyticsService | None = None) -> FastAPI:
 
     @app.post("/sync")
     def sync_now() -> dict[str, Any]:
+        if not analytics_service.allow_on_demand_sync:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "skipped": True,
+                    "reason": "local SQLite sync is disabled; dashboard/report data is queried live from ES",
+                },
+            )
         return analytics_service.sync_from_local_logs()
 
     @app.get("/frontend/filters")
@@ -124,6 +159,8 @@ def create_app(service: AnalyticsService | None = None) -> FastAPI:
                 host=payload.host,
                 date_from=payload.date_from,
                 date_to=payload.date_to,
+                summary_text=payload.summary_text,
+                llm_sections=payload.llm_sections,
             )
         except DashboardQueryError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
@@ -131,6 +168,18 @@ def create_app(service: AnalyticsService | None = None) -> FastAPI:
             "filename": result["filename"],
             "download_url": f"/frontend/report/download?name={result['filename']}",
         }
+
+    @app.post("/frontend/report/context")
+    def frontend_report_context(payload: GenerateReportRequest) -> dict[str, Any]:
+        try:
+            return analytics_service.build_report_summary_context(
+                customer_name=payload.customer_name,
+                host=payload.host,
+                date_from=payload.date_from,
+                date_to=payload.date_to,
+            )
+        except DashboardQueryError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
 
     @app.get("/frontend/report/download")
     def frontend_report_download(name: str = Query(...)) -> FileResponse:
@@ -143,5 +192,13 @@ def create_app(service: AnalyticsService | None = None) -> FastAPI:
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             filename=path.name,
         )
+
+    @app.get("/frontend/helper/download")
+    def frontend_helper_download() -> FileResponse:
+        try:
+            path = analytics_service.resolve_helper_bundle_path()
+        except DashboardQueryError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
+        return FileResponse(path, media_type="application/zip", filename=path.name)
 
     return app

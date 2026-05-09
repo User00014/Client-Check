@@ -147,8 +147,24 @@ def build_handler(service: AnalyticsService):
                     )
                 except DashboardQueryError as exc:
                     return self._write_json(exc.status_code, exc.to_dict())
+            if parsed.path == "/frontend/helper/download":
+                try:
+                    helper_path = service.resolve_helper_bundle_path()
+                    return self._write_file(
+                        HTTPStatus.OK,
+                        helper_path,
+                        "application/zip",
+                        helper_path.name,
+                    )
+                except DashboardQueryError as exc:
+                    return self._write_json(exc.status_code, exc.to_dict())
+            if parsed.path == "/frontend/report/context":
+                if self.command != "POST":
+                    return self._write_json(HTTPStatus.METHOD_NOT_ALLOWED, {"detail": "method not allowed"})
             if parsed.path == "/bots/catalog":
                 return self._write_json(HTTPStatus.OK, service.get_bot_catalog())
+            if parsed.path == "/bots/taxonomy":
+                return self._write_json(HTTPStatus.OK, service.get_bot_taxonomy())
             if parsed.path == "/increment/snapshot":
                 qs = parse_qs(parsed.query)
                 limit = int(qs["limit"][0]) if "limit" in qs else None
@@ -170,6 +186,14 @@ def build_handler(service: AnalyticsService):
                 except ValueError as exc:
                     return self._write_json(HTTPStatus.BAD_REQUEST, {"detail": str(exc)})
             if self.path == "/sync":
+                if not service.allow_on_demand_sync:
+                    return self._write_json(
+                        HTTPStatus.CONFLICT,
+                        {
+                            "skipped": True,
+                            "reason": "local SQLite sync is disabled; dashboard/report data is queried live from ES",
+                        },
+                    )
                 return self._write_json(HTTPStatus.OK, service.sync_from_local_logs())
             if self.path == "/frontend/report":
                 try:
@@ -179,6 +203,8 @@ def build_handler(service: AnalyticsService):
                         host=payload.get("host"),
                         date_from=str(payload.get("date_from") or ""),
                         date_to=str(payload.get("date_to") or ""),
+                        summary_text=payload.get("summary_text"),
+                        llm_sections=payload.get("llm_sections"),
                     )
                     return self._write_json(
                         HTTPStatus.OK,
@@ -189,6 +215,31 @@ def build_handler(service: AnalyticsService):
                     )
                 except DashboardQueryError as exc:
                     return self._write_json(exc.status_code, exc.to_dict())
+            if self.path == "/frontend/report/context":
+                try:
+                    payload = self._read_json()
+                    result = service.build_report_summary_context(
+                        customer_name=payload.get("customer_name"),
+                        host=payload.get("host"),
+                        date_from=str(payload.get("date_from") or ""),
+                        date_to=str(payload.get("date_to") or ""),
+                    )
+                    return self._write_json(HTTPStatus.OK, result)
+                except DashboardQueryError as exc:
+                    return self._write_json(exc.status_code, exc.to_dict())
+            if self.path == "/bots/taxonomy/upsert":
+                try:
+                    payload = self._read_json()
+                    result = service.upsert_bot_taxonomy(
+                        bot_name=str(payload.get("bot_name") or ""),
+                        category=str(payload.get("category") or ""),
+                        sample_ua_token=str(payload.get("sample_ua_token") or ""),
+                        sample_ua=str(payload.get("sample_ua") or ""),
+                        note=str(payload.get("note") or ""),
+                    )
+                    return self._write_json(HTTPStatus.OK, result)
+                except ValueError as exc:
+                    return self._write_json(HTTPStatus.BAD_REQUEST, {"detail": str(exc)})
             return self._write_json(HTTPStatus.NOT_FOUND, {"detail": "not found"})
 
         def log_message(self, format, *args):

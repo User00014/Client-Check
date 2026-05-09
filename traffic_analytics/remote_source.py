@@ -5,6 +5,7 @@ import ipaddress
 import json
 import os
 import ssl
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -392,6 +393,16 @@ class KibanaRemoteLogSource:
         include_rankings: bool = True,
     ) -> dict[str, Any]:
         exact_index_names = self._clean_index_names(index_names)
+        if len(exact_index_names) >= 16:
+            return self._get_live_dashboard_window_chunked(
+                exact_index_names,
+                host_filters=host_filters,
+                start_utc=start_utc,
+                end_utc=end_utc,
+                top_bots=top_bots,
+                top_pages=top_pages,
+                include_rankings=include_rankings,
+            )
         shopify_scope = self._is_shopify_scope(exact_index_names)
         focused = self._dashboard_category_filters(allow_io_mirror=shopify_scope)
         human_referred = self._human_referred_filters(allow_io_mirror=shopify_scope)
@@ -474,6 +485,107 @@ class KibanaRemoteLogSource:
                 max(top_bots, 1),
                 shopify_scope,
             )
+        return result
+
+    def _get_live_dashboard_window_chunked(
+        self,
+        index_names: list[str],
+        host_filters: list[str] | None,
+        start_utc: str,
+        end_utc: str,
+        top_bots: int,
+        top_pages: int,
+        include_rankings: bool,
+    ) -> dict[str, Any]:
+        chunks = [index_names[idx: idx + 8] for idx in range(0, len(index_names), 8)]
+        def _load_chunk(chunk: list[str]) -> dict[str, Any]:
+            return self.get_live_dashboard_window(
+                index_names=chunk,
+                host_filters=host_filters,
+                start_utc=start_utc,
+                end_utc=end_utc,
+                top_bots=max(top_bots * 3, top_bots, 10),
+                top_pages=max(top_pages * 4, top_pages, 20),
+                include_rankings=include_rankings,
+            )
+
+        with ThreadPoolExecutor(max_workers=min(3, len(chunks))) as executor:
+            windows = list(executor.map(_load_chunk, chunks))
+        return self._merge_live_dashboard_windows(windows, top_bots=top_bots, top_pages=top_pages)
+
+    @staticmethod
+    def _merge_live_dashboard_windows(windows: list[dict[str, Any]], top_bots: int, top_pages: int) -> dict[str, Any]:
+        result = {
+            "focused": {},
+            "human_referred": {},
+            "days": [],
+            "ai_category_rankings": {"ai_search": [], "ai_training": [], "ai_index": []},
+            "unknown_bot_rankings": [],
+            "page_ranking": [],
+        }
+        day_map: dict[str, dict[str, Any]] = {}
+        ranking_maps: dict[str, dict[str, int]] = {"ai_search": {}, "ai_training": {}, "ai_index": {}}
+        page_map: dict[str, dict[str, Any]] = {}
+        unknown_map: dict[str, dict[str, Any]] = {}
+        page_numeric_keys = ("ai_requests", "user_requests", "user_traditional", "user_ai", "ai_search", "ai_training", "ai_index")
+
+        for window in windows:
+            for bucket_name in ("focused", "human_referred"):
+                for key, value in (window.get(bucket_name) or {}).items():
+                    result[bucket_name][key] = int(result[bucket_name].get(key, 0)) + int(value or 0)
+            for row in window.get("days") or []:
+                date_key = str(row.get("date") or "")
+                if not date_key:
+                    continue
+                target = day_map.setdefault(date_key, {"date": date_key})
+                for key, value in row.items():
+                    if key == "date":
+                        continue
+                    target[key] = int(target.get(key, 0)) + int(value or 0)
+            for category, rows in (window.get("ai_category_rankings") or {}).items():
+                target = ranking_maps.setdefault(category, {})
+                for row in rows or []:
+                    platform = str(row.get("platform") or "")
+                    if not platform:
+                        continue
+                    target[platform] = int(target.get(platform, 0)) + int(row.get("requests") or 0)
+            for row in window.get("page_ranking") or []:
+                page = str(row.get("page") or "")
+                if not page:
+                    continue
+                target = page_map.setdefault(page, {"page": page})
+                for key in page_numeric_keys:
+                    target[key] = int(target.get(key, 0)) + int(row.get(key) or 0)
+            for row in window.get("unknown_bot_rankings") or []:
+                platform = str(row.get("platform") or "")
+                if not platform:
+                    continue
+                target = unknown_map.setdefault(
+                    platform,
+                    {
+                        "platform": platform,
+                        "requests": 0,
+                        "signal": row.get("signal") or "",
+                        "sample_ua": row.get("sample_ua") or "",
+                    },
+                )
+                target["requests"] = int(target.get("requests", 0)) + int(row.get("requests") or 0)
+                if not target.get("signal") and row.get("signal"):
+                    target["signal"] = row.get("signal")
+                if not target.get("sample_ua") and row.get("sample_ua"):
+                    target["sample_ua"] = row.get("sample_ua")
+
+        result["days"] = [day_map[key] for key in sorted(day_map)]
+        for category, rows in ranking_maps.items():
+            ranked = [{"platform": platform, "requests": requests} for platform, requests in rows.items() if requests > 0]
+            ranked.sort(key=lambda item: (-item["requests"], item["platform"]))
+            result["ai_category_rankings"][category] = ranked[: max(top_bots, 1)]
+        pages = list(page_map.values())
+        pages.sort(key=lambda item: (-int(item.get("ai_requests") or 0), item.get("page") or ""))
+        result["page_ranking"] = pages[: max(top_pages, 1)]
+        unknown_rows = list(unknown_map.values())
+        unknown_rows.sort(key=lambda item: (-int(item.get("requests") or 0), item.get("platform") or ""))
+        result["unknown_bot_rankings"] = unknown_rows[: max(top_bots, 1)]
         return result
 
     def get_recent_dashboard_records(
@@ -559,8 +671,49 @@ class KibanaRemoteLogSource:
     def _query_index_target(self, index_names: list[str] | None = None) -> str:
         exact_index_names = self._clean_index_names(index_names)
         if exact_index_names:
-            return ",".join(exact_index_names)
+            return ",".join(self._compact_daily_index_targets(exact_index_names))
         return self._metadata_index_target()
+
+    def _compact_daily_index_targets(self, index_names: list[str]) -> list[str]:
+        if len(index_names) < 16:
+            return index_names
+        compacted: list[str] = []
+        seen: set[str] = set()
+        grouped: dict[str, list[str]] = {}
+        passthrough: list[str] = []
+        for index_name in index_names:
+            prefix = self._daily_index_prefix(index_name)
+            if prefix:
+                grouped.setdefault(prefix, []).append(index_name)
+            else:
+                passthrough.append(index_name)
+        for prefix, rows in grouped.items():
+            target = f"{prefix}*" if len(rows) >= 16 else None
+            for value in ([target] if target else rows):
+                if value and value not in seen:
+                    seen.add(value)
+                    compacted.append(value)
+        for index_name in passthrough:
+            if index_name not in seen:
+                seen.add(index_name)
+                compacted.append(index_name)
+        return compacted or index_names
+
+    @staticmethod
+    def _daily_index_prefix(index_name: str) -> str:
+        suffix = index_name[-10:]
+        if (
+            len(index_name) > 11
+            and index_name[-11] == "-"
+            and len(suffix) == 10
+            and suffix[4] == "."
+            and suffix[7] == "."
+            and suffix[:4].isdigit()
+            and suffix[5:7].isdigit()
+            and suffix[8:10].isdigit()
+        ):
+            return index_name[:-10]
+        return ""
 
     def _clean_index_names(self, index_names: list[str] | None) -> list[str]:
         seen: set[str] = set()
@@ -846,6 +999,9 @@ class KibanaRemoteLogSource:
             return ""
         return (datetime.fromisoformat(str(value).replace("Z", "+00:00")) + timedelta(hours=8)).replace(tzinfo=None).isoformat(sep=" ")
 
+    def _successful_page_query(self) -> dict[str, Any]:
+        return {"range": {"status": {"gte": 200, "lt": 300}}}
+
     def _top_ai_pages(
         self,
         index_names: list[str],
@@ -863,7 +1019,7 @@ class KibanaRemoteLogSource:
             "runtime_mappings": {"normalized_page": self._normalized_page_runtime()},
             "query": {
                 "bool": {
-                    "filter": self._dashboard_base_filters(start_utc, end_utc, host_filters, shopify_scope) + [ai_any]
+                    "filter": self._dashboard_base_filters(start_utc, end_utc, host_filters, shopify_scope) + [ai_any, self._successful_page_query()]
                 }
             },
             "aggs": {"pages": {"terms": {"field": "normalized_page", "size": max(limit, 1)}}},
@@ -889,7 +1045,7 @@ class KibanaRemoteLogSource:
             "runtime_mappings": {"normalized_page": self._normalized_page_runtime()},
             "query": {
                 "bool": {
-                    "filter": self._dashboard_base_filters(start_utc, end_utc, host_filters, shopify_scope) + [{"terms": {"normalized_page": page_keys}}]
+                    "filter": self._dashboard_base_filters(start_utc, end_utc, host_filters, shopify_scope) + [self._successful_page_query(), {"terms": {"normalized_page": page_keys}}]
                 }
             },
             "aggs": {
@@ -1029,7 +1185,6 @@ class KibanaRemoteLogSource:
                     self._ai_search_query(),
                     self._ai_training_query(),
                     self._ai_index_query(),
-                    self._any_ua_match(["facebookbot", "imagesiftbot", "omgilibot", "timpibot"]),
                 ],
                 "minimum_should_match": 1,
             }
@@ -1037,12 +1192,7 @@ class KibanaRemoteLogSource:
 
     def _seo_bot_query(self) -> dict[str, Any]:
         taxonomy_tokens = self._official_seo_tokens()
-        should_filters = [
-            self._any_ua_match(taxonomy_tokens) if taxonomy_tokens else {"match_none": {}},
-            self._ua_match("duckduckbot"),
-            self._ua_match("yandexbot"),
-            self._ua_match("sosospider"),
-        ]
+        should_filters = [self._any_ua_match(taxonomy_tokens) if taxonomy_tokens else {"match_none": {}}]
         return {
             "bool": {
                 "should": should_filters,

@@ -11,10 +11,12 @@ import paramiko
 PROJECT_ROOT = Path(__file__).resolve().parent
 RUNTIME_FILES = [
     "run_traffic_api_stdlib.py",
+    "build_traffic_databases.py",
+    "LocalReportLLM_Helper.zip",
     "reporting.local.json",
     "Bot种类划分.xlsx",
     "bot_summary.csv",
-    "2026-04-15-qbedding-traffic-report.docx",
+    "2026-04-22-qbedding-traffic-report-client.docx",
     "web/dashboard.html",
     "traffic_analytics/__init__.py",
     "traffic_analytics/api.py",

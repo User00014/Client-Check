@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
-import re
 from dataclasses import dataclass
 from typing import Iterable
 from urllib.parse import parse_qs, urlparse, urlsplit
@@ -46,49 +45,6 @@ PATH_SUFFIX_RULES = [
     ("-", "truncated_path"),
 ]
 
-REPO_BAIDU_AI_RE = re.compile(r"baiduspider.*ai")
-REPO_AI_RETRIEVAL_RULES = [
-    ("chatgpt-user", "ChatGPT-User"),
-    ("oai-searchbot", "OAI-SearchBot"),
-    ("claudebot", "ClaudeBot"),
-    ("claude-web", "claude-web"),
-    ("googleagent-mariner", "GoogleAgent-Mariner"),
-    ("applebot-extended", "Applebot-Extended"),
-    ("perplexitybot", "PerplexityBot"),
-    ("perplexity-user", "Perplexity-User"),
-    ("mistralai-user", "MistralAI-User"),
-    ("meta-externalagent", "meta-externalagent"),
-    ("cohere-ai", "cohere-ai"),
-    ("youbot", "YouBot"),
-    ("duckassistbot", "DuckAssistBot"),
-    ("moonshot", "Moonshot"),
-]
-REPO_AI_TRAINING_RULES = [
-    ("gptbot", "GPTBot"),
-    ("anthropic-ai", "anthropic-ai"),
-    ("google-extended", "Google-Extended"),
-    ("amazonbot", "Amazonbot"),
-    ("ccbot", "CCBot"),
-    ("diffbot", "Diffbot"),
-    ("ai2bot", "AI2Bot"),
-]
-REPO_AI_INDEX_RULES = [
-    ("googleother", "GoogleOther"),
-    ("bytespider", "Bytespider"),
-    ("toutiaospider", "ToutiaoSpider"),
-    ("baiduspider-render", "Baiduspider-render"),
-    ("qwen", "Qwen"),
-    ("alibaba", "Alibaba"),
-    ("yisouspider", "YisouSpider"),
-    ("360spider", "360Spider"),
-]
-REPO_AI_UNCLASSIFIED_RULES = [
-    ("facebookbot", "FacebookBot"),
-    ("imagesiftbot", "ImagesiftBot"),
-    ("omgilibot", "Omgilibot"),
-    ("timpibot", "Timpibot"),
-]
-REPO_SEO_OTHER_KEYWORDS = ["bot", "spider", "crawler", "crawl", "slurp", "scraper", "scan", "fetch"]
 REPO_SUSPICIOUS_PATTERNS = [
     "/.git", "/.aws", "/.env", "/.s3cfg",
     "/phpinfo.php", "/info.php",
@@ -119,47 +75,6 @@ class AgentRule:
     description: str
     tokens: tuple[str, ...]
 
-
-BOT_RULES: tuple[AgentRule, ...] = (
-    AgentRule("OAI-SearchBot", "AI Retrieval", "AI Bot", "OpenAI", "ChatGPT Search", "search retrieval crawl", "bot", "high", "OpenAI search retrieval crawler for search-style results.", ("oai-searchbot",)),
-    AgentRule("ChatGPT-User", "AI Retrieval", "AI Bot", "OpenAI", "ChatGPT", "user-triggered fetch", "bot", "high", "User-triggered retrieval agent fetching pages on behalf of ChatGPT users.", ("chatgpt-user",)),
-    AgentRule("GPTBot", "AI Training", "AI Bot", "OpenAI", "GPTBot", "foundation model crawl", "bot", "high", "OpenAI crawler commonly used for model improvement and corpus acquisition.", ("gptbot",)),
-    AgentRule("Claude-SearchBot", "AI Retrieval", "AI Bot", "Anthropic", "Claude Search", "search retrieval crawl", "bot", "high", "Anthropic search crawler used for retrieval-style results.", ("claude-searchbot",)),
-    AgentRule("ClaudeBot", "AI Training", "AI Bot", "Anthropic", "ClaudeBot", "foundation model crawl", "bot", "high", "Anthropic crawler for training/index acquisition scenarios.", ("claudebot",)),
-    AgentRule("PerplexityBot", "AI Retrieval", "AI Bot", "Perplexity", "Perplexity", "answer retrieval crawl", "bot", "high", "Perplexity retrieval crawler used for answer generation and page fetching.", ("perplexitybot",)),
-    AgentRule("meta-externalagent", "AI Retrieval", "AI Bot", "Meta", "Meta External Agent", "external AI fetch", "bot", "high", "Meta external agent used to fetch shared content for AI or platform experiences.", ("meta-externalagent",)),
-    AgentRule("Amazonbot", "AI Training", "AI Bot", "Amazon", "Amazonbot", "crawl and indexing", "bot", "high", "Amazon crawler used for indexing and AI-related fetch workloads.", ("amazonbot",)),
-    AgentRule("CCBot", "AI Training", "AI Bot", "Common Crawl", "CCBot", "web archive crawl", "bot", "high", "Common Crawl crawler frequently reused by downstream AI training pipelines.", ("ccbot",)),
-    AgentRule("Bytespider", "AI Indexer", "AI Bot", "ByteDance", "Bytespider", "indexing and content understanding", "bot", "high", "ByteDance spider used by search and content products.", ("bytespider",)),
-    AgentRule("YisouSpider", "AI Indexer", "AI Bot", "Yisou", "YisouSpider", "indexing and discovery", "bot", "high", "Yisou content crawler for search and content discovery.", ("yisouspider", "yisou")),
-    AgentRule("360Spider", "AI Indexer", "AI Bot", "360 Search", "360Spider", "indexing and SEO discovery", "bot", "high", "360 search crawler that often masquerades as common desktop browsers.", ("360spider",)),
-    AgentRule("Baiduspider-AI", "AI Indexer", "AI Bot", "Baidu", "Baiduspider AI", "AI-oriented crawl", "bot", "high", "Baidu AI-oriented crawl identity.", ("baiduspider-ai",)),
-    AgentRule("Baiduspider-render", "AI Indexer", "AI Bot", "Baidu", "Baiduspider Render", "render crawl", "bot", "high", "Baidu rendering crawler.", ("baiduspider-render",)),
-    AgentRule("GoogleOther", "AI Indexer", "AI Bot", "Google", "GoogleOther", "specialized fetch", "bot", "high", "Google specialized fetch crawler distinct from standard Googlebot.", ("googleother",)),
-    AgentRule("Googlebot-Image", "SEO Bot", "SEO Bot", "Google", "Googlebot Image", "image indexing", "bot", "high", "Google image indexing crawler.", ("googlebot-image",)),
-    AgentRule("Googlebot", "SEO Bot", "SEO Bot", "Google", "Googlebot", "search indexing", "bot", "high", "Google search indexing crawler.", ("googlebot",)),
-    AgentRule("bingbot", "SEO Bot", "SEO Bot", "Microsoft", "Bingbot", "search indexing", "bot", "high", "Bing search crawler.", ("bingbot",)),
-    AgentRule("Baiduspider", "SEO Bot", "SEO Bot", "Baidu", "Baiduspider", "search indexing", "bot", "high", "Baidu search crawler.", ("baiduspider",)),
-    AgentRule("Sogou", "SEO Bot", "SEO Bot", "Sogou", "SogouSpider", "search indexing", "bot", "high", "Sogou search crawler.", ("sogou",)),
-    AgentRule("PetalBot", "SEO Bot", "SEO Bot", "Huawei", "PetalBot", "search indexing", "bot", "high", "Huawei Petal search crawler.", ("petalbot",)),
-    AgentRule("DotBot", "SEO Bot", "SEO Bot", "Moz", "DotBot", "SEO link crawl", "bot", "high", "Moz crawler used in SEO/link graph products.", ("dotbot",)),
-    AgentRule("MJ12bot", "SEO Bot", "SEO Bot", "Majestic", "MJ12bot", "SEO link crawl", "bot", "high", "Majestic SEO crawler.", ("mj12bot",)),
-    AgentRule("Slurp", "SEO Bot", "SEO Bot", "Yahoo", "Slurp", "search indexing", "bot", "high", "Yahoo crawler.", ("slurp",)),
-    AgentRule("facebookexternalhit", "Social Preview Bot", "Social / Platform Bot", "Meta", "facebookexternalhit", "link preview fetch", "bot", "high", "Facebook link preview crawler.", ("facebookexternalhit",)),
-    AgentRule("Facebot", "Social Preview Bot", "Social / Platform Bot", "Meta", "Facebot", "link preview fetch", "bot", "high", "Meta link preview crawler.", ("facebot",)),
-    AgentRule("Twitterbot", "Social Preview Bot", "Social / Platform Bot", "X", "Twitterbot", "link preview fetch", "bot", "high", "Twitter/X link preview crawler.", ("twitterbot",)),
-    AgentRule("TikTokSpider", "Social Preview Bot", "Social / Platform Bot", "TikTok", "TikTokSpider", "preview and indexing fetch", "bot", "high", "TikTok preview/content fetch crawler.", ("tiktokspider",)),
-    AgentRule("Google-Site-Verification", "Verification Bot", "Verification Bot", "Google", "Site Verification", "ownership verification", "bot", "high", "Google ownership verification agent.", ("google-site-verification",)),
-    AgentRule("HeadlessChrome", "Browser Automation", "Automation / Script", "Unknown", "Headless Browser", "browser automation", "automation", "medium", "Headless browser automation or scripted crawl.", ("headlesschrome", "headless")),
-    AgentRule("Scrapy", "Security / Scanner", "Automation / Script", "Unknown", "Scrapy", "scripted crawling", "automation", "high", "Scrapy-based scripted crawler.", ("scrapy",)),
-    AgentRule("python-requests", "Automation / Script", "Automation / Script", "Unknown", "python-requests", "scripted HTTP client", "automation", "high", "Python requests client, often used for scripts, probes, or internal automation.", ("python-requests",)),
-    AgentRule("curl", "Automation / Script", "Automation / Script", "Unknown", "curl", "scripted HTTP client", "automation", "high", "curl or libcurl client.", ("libcurl", "curl/")),
-    AgentRule("Go-http-client", "Automation / Script", "Automation / Script", "Unknown", "Go-http-client", "scripted HTTP client", "automation", "high", "Go HTTP client automation.", ("go-http-client",)),
-    AgentRule("okhttp", "Automation / Script", "Automation / Script", "Unknown", "okhttp", "scripted HTTP client", "automation", "medium", "OkHttp client often used by mobile apps, SDK probes, or scripts.", ("okhttp",)),
-    AgentRule("axios", "Automation / Script", "Automation / Script", "Unknown", "axios", "scripted HTTP client", "automation", "medium", "Axios-based scripted client.", ("axios",)),
-    AgentRule("wget", "Automation / Script", "Automation / Script", "Unknown", "wget", "scripted fetch", "automation", "high", "wget scripted fetch client.", ("wget",)),
-    AgentRule("Bun", "Automation / Script", "Automation / Script", "Unknown", "Bun", "scripted runtime client", "automation", "medium", "Bun runtime client, often used by scripts or asset checks.", ("bun/",)),
-)
 
 APP_RULES: tuple[AgentRule, ...] = (
     AgentRule("Doubao / newsai", "AI App WebView", "App WebView", "ByteDance", "newsai", "in-app page open", "human_app", "medium", "Likely human-triggered AI app webview traffic.", ("newsai/",)),
@@ -366,21 +281,6 @@ def classify_agent(user_agent: str | None) -> dict[str, str]:
     if official_entry:
         return _official_entry_payload(official_entry, official_token or "")
 
-    rule, token = _match_rule(ua, BOT_RULES)
-    if rule:
-        return {
-            "actor_type": rule.actor_type,
-            "bucket": rule.bucket,
-            "category": rule.category,
-            "family": rule.family,
-            "vendor": rule.vendor,
-            "product": rule.product,
-            "purpose": rule.purpose,
-            "confidence": rule.confidence,
-            "description": rule.description,
-            "match_token": token or "",
-        }
-
     rule, token = _match_rule(ua, APP_RULES)
     if rule:
         return {
@@ -557,13 +457,6 @@ def repo_classify_seo_bot(user_agent: str | None) -> str | None:
     entry, _ = _official_taxonomy_match(user_agent)
     if entry and entry.category == "SEO Bot":
         return entry.bot_name
-    ua = (user_agent or "").lower()
-    if "duckduckbot" in ua:
-        return "DuckDuckBot"
-    if "yandexbot" in ua:
-        return "YandexBot"
-    if "sosospider" in ua:
-        return "Sosospider"
     return None
 
 

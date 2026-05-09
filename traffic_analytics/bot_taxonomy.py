@@ -12,6 +12,7 @@ import csv
 import re
 import xml.etree.ElementTree as ET
 import zipfile
+from typing import Any
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -74,6 +75,16 @@ NON_AI_BOT_CATEGORIES = {
     "Social Preview Bot",
     "Verification Bot",
 }
+BOT_TAXONOMY_CATEGORIES = (
+    "AI Search",
+    "AI Training",
+    "AI Index",
+    "SEO Bot",
+    "Automation / Script",
+    "Social Preview Bot",
+    "Verification Bot",
+    "Other External Bot",
+)
 OFFICIAL_AI_REPO_CATEGORIES = ("ai_search", "ai_training", "ai_index")
 OFFICIAL_AI_REPO_CATEGORIES_WITH_UNCLASSIFIED = ("ai_search", "ai_training", "ai_index", "ai_unclassified")
 
@@ -133,6 +144,8 @@ BOT_NAME_IGNORE = {
 BOT_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9._\-]{1,63}")
 CELL_REF_RE = re.compile(r"([A-Z]+)")
 XML_NS = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+SPREADSHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+ET.register_namespace("", SPREADSHEET_NS)
 
 
 @dataclass(frozen=True)
@@ -156,6 +169,25 @@ def _normalize_text(value: object) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _normalize_token(value: object) -> str:
+    return _normalize_text(value).lower()
+
+
+def _validate_taxonomy_payload(bot_name: str, category: str, token: str) -> tuple[str, str, str]:
+    clean_name = _normalize_text(bot_name)
+    clean_category = _normalize_text(category)
+    clean_token = _normalize_token(token)
+    if not clean_name:
+        raise ValueError("bot_name cannot be empty")
+    if clean_category not in BOT_TAXONOMY_CATEGORIES:
+        raise ValueError(f"unsupported bot category: {clean_category}")
+    if len(clean_token) < 3:
+        raise ValueError("sample_ua_token must contain at least 3 characters")
+    if clean_token in {"bot", "spider", "crawler", "crawl", "fetch", "scan", "scanner", "agent"}:
+        raise ValueError("sample_ua_token is too broad; use a more specific bot token")
+    return clean_name, clean_category, clean_token
 
 
 def _load_shared_strings(zf: zipfile.ZipFile) -> list[str]:
@@ -184,6 +216,135 @@ def _cell_value(cell: ET.Element, shared_strings: list[str]) -> str:
         except (ValueError, IndexError):
             return ""
     return raw
+
+
+def _append_shared_string(root: ET.Element, value: str) -> int:
+    si = ET.SubElement(root, f"{{{SPREADSHEET_NS}}}si")
+    text_node = ET.SubElement(si, f"{{{SPREADSHEET_NS}}}t")
+    text_node.text = value
+    count = len(root.findall(f"{{{SPREADSHEET_NS}}}si"))
+    root.set("count", str(count))
+    root.set("uniqueCount", str(count))
+    return count - 1
+
+
+def _set_cell_string(cell: ET.Element, shared_root: ET.Element, value: str) -> None:
+    cell.set("t", "s")
+    for child in list(cell):
+        cell.remove(child)
+    value_node = ET.SubElement(cell, f"{{{SPREADSHEET_NS}}}v")
+    value_node.text = str(_append_shared_string(shared_root, value))
+
+
+def _upsert_xlsx_row(
+    path: Path,
+    *,
+    bot_name: str,
+    category: str,
+    sample_ua_token: str,
+    sample_ua: str = "",
+    note: str = "",
+) -> dict[str, Any]:
+    with zipfile.ZipFile(path, "r") as zf:
+        files = {name: zf.read(name) for name in zf.namelist()}
+    shared_root = ET.fromstring(files.get("xl/sharedStrings.xml", b'<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>'))
+    shared_strings = [
+        "".join((node.text or "") for node in si.findall(".//a:t", XML_NS))
+        for si in shared_root.findall("a:si", XML_NS)
+    ]
+    sheet_root = ET.fromstring(files["xl/worksheets/sheet1.xml"])
+    sheet_data = sheet_root.find("a:sheetData", XML_NS)
+    if sheet_data is None:
+        raise ValueError("sheet1.xml has no sheetData")
+
+    rows = sheet_data.findall("a:row", XML_NS)
+    if not rows:
+        raise ValueError("taxonomy sheet has no header row")
+    header_row = rows[0]
+    headers_by_name: dict[str, str] = {}
+    for cell in header_row.findall("a:c", XML_NS):
+        ref = cell.attrib.get("r", "")
+        match = CELL_REF_RE.match(ref)
+        if not match:
+            continue
+        text = _normalize_text(_cell_value(cell, shared_strings))
+        if text:
+            headers_by_name[text] = match.group(1)
+
+    required_headers = ("bot_name", "category", "sample_ua_token")
+    missing = [name for name in required_headers if name not in headers_by_name]
+    if missing:
+        raise ValueError("taxonomy sheet missing headers: " + ", ".join(missing))
+
+    max_row = 1
+    target_row: ET.Element | None = None
+    token_col = headers_by_name["sample_ua_token"]
+    name_col = headers_by_name["bot_name"]
+    for row in rows[1:]:
+        row_index = int(row.attrib.get("r", "0") or 0)
+        max_row = max(max_row, row_index)
+        values_by_col: dict[str, str] = {}
+        for cell in row.findall("a:c", XML_NS):
+            ref = cell.attrib.get("r", "")
+            match = CELL_REF_RE.match(ref)
+            if match:
+                values_by_col[match.group(1)] = _normalize_text(_cell_value(cell, shared_strings))
+        existing_token = _normalize_token(values_by_col.get(token_col))
+        existing_name = _normalize_text(values_by_col.get(name_col)).lower()
+        if existing_token == sample_ua_token or existing_name == bot_name.lower():
+            target_row = row
+            break
+
+    created = target_row is None
+    if target_row is None:
+        next_row = max_row + 1
+        target_row = ET.SubElement(sheet_data, f"{{{SPREADSHEET_NS}}}row", {"r": str(next_row)})
+    else:
+        next_row = int(target_row.attrib.get("r", "0") or 0)
+
+    cells_by_col: dict[str, ET.Element] = {}
+    for cell in target_row.findall("a:c", XML_NS):
+        ref = cell.attrib.get("r", "")
+        match = CELL_REF_RE.match(ref)
+        if match:
+            cells_by_col[match.group(1)] = cell
+
+    def ensure_cell(header: str) -> ET.Element:
+        col = headers_by_name[header]
+        if col in cells_by_col:
+            return cells_by_col[col]
+        cell = ET.Element(f"{{{SPREADSHEET_NS}}}c", {"r": f"{col}{next_row}"})
+        target_row.append(cell)
+        cells_by_col[col] = cell
+        return cell
+
+    values = {
+        "bot_name": bot_name,
+        "category": category,
+        "sample_ua_token": sample_ua_token,
+        "ua_variants": "1",
+        "说明": note or "前端维护",
+        "是否存在争议": "0",
+        "sample_ua": sample_ua,
+        "bot流量": "0",
+    }
+    for header, value in values.items():
+        if header in headers_by_name and (created or header in required_headers or value):
+            _set_cell_string(ensure_cell(header), shared_root, value)
+
+    target_row[:] = sorted(
+        list(target_row),
+        key=lambda cell: CELL_REF_RE.match(cell.attrib.get("r", "")).group(1) if CELL_REF_RE.match(cell.attrib.get("r", "")) else "",
+    )
+
+    files["xl/sharedStrings.xml"] = ET.tostring(shared_root, encoding="utf-8", xml_declaration=True)
+    files["xl/worksheets/sheet1.xml"] = ET.tostring(sheet_root, encoding="utf-8", xml_declaration=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name, data in files.items():
+            zf.writestr(name, data)
+    tmp_path.replace(path)
+    return {"created": created, "bot_name": bot_name, "category": category, "sample_ua_token": sample_ua_token}
 
 
 def _sheet_rows_from_xlsx(path: Path) -> list[dict[str, str]]:
@@ -261,6 +422,75 @@ def _load_entries_from_fallback() -> list[BotTaxonomyEntry]:
         )
         for bot_name, category, token in OFFICIAL_BOT_FALLBACK_ROWS
     ]
+
+
+def list_bot_taxonomy_rows() -> list[dict[str, str]]:
+    taxonomy = load_bot_taxonomy()
+    return [
+        {
+            "bot_name": entry.bot_name,
+            "category": entry.category,
+            "sample_ua_token": entry.token,
+            "repo_category": entry.repo_category or "",
+        }
+        for entry in taxonomy.entries
+    ]
+
+
+def upsert_bot_taxonomy_entry(
+    *,
+    bot_name: str,
+    category: str,
+    sample_ua_token: str,
+    sample_ua: str = "",
+    note: str = "",
+) -> dict[str, Any]:
+    clean_name, clean_category, clean_token = _validate_taxonomy_payload(bot_name, category, sample_ua_token)
+    if OFFICIAL_BOT_XLSX_PATH.exists():
+        result = _upsert_xlsx_row(
+            OFFICIAL_BOT_XLSX_PATH,
+            bot_name=clean_name,
+            category=clean_category,
+            sample_ua_token=clean_token,
+            sample_ua=_normalize_text(sample_ua),
+            note=_normalize_text(note),
+        )
+    else:
+        existing_rows: list[dict[str, str]] = []
+        if OFFICIAL_BOT_CSV_PATH.exists():
+            with OFFICIAL_BOT_CSV_PATH.open("r", encoding="utf-8-sig", newline="") as handle:
+                existing_rows = [dict(row) for row in csv.DictReader(handle)]
+        fieldnames = ["bot_name", "category", "ua_variants", "sample_ua_token", "说明", "是否存在争议", "sample_ua", "bot流量"]
+        created = True
+        for row in existing_rows:
+            if _normalize_token(row.get("sample_ua_token")) == clean_token or _normalize_text(row.get("bot_name")).lower() == clean_name.lower():
+                row.update({"bot_name": clean_name, "category": clean_category, "sample_ua_token": clean_token})
+                if sample_ua:
+                    row["sample_ua"] = _normalize_text(sample_ua)
+                if note:
+                    row["说明"] = _normalize_text(note)
+                created = False
+                break
+        if created:
+            existing_rows.append(
+                {
+                    "bot_name": clean_name,
+                    "category": clean_category,
+                    "ua_variants": "1",
+                    "sample_ua_token": clean_token,
+                    "说明": _normalize_text(note) or "前端维护",
+                    "是否存在争议": "0",
+                    "sample_ua": _normalize_text(sample_ua),
+                    "bot流量": "0",
+                }
+            )
+        with OFFICIAL_BOT_CSV_PATH.open("w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows([{key: row.get(key, "") for key in fieldnames} for row in existing_rows])
+        result = {"created": created, "bot_name": clean_name, "category": clean_category, "sample_ua_token": clean_token}
+    load_bot_taxonomy.cache_clear()
+    return result
 
 
 @lru_cache(maxsize=1)

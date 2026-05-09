@@ -22,7 +22,13 @@ tmp/
 venv/
 remote_source.local.json
 reporting.local.json
+helper.local.json
 AI分类说明.md
+部署细节说明.md
+LocalReportLLM_Helper.zip
+LocalReportLLM_Helper/
+build/
+dist/
 
 *.pem
 *.key

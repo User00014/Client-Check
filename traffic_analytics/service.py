@@ -23,6 +23,7 @@ from .classification import (
     repo_extract_base_domain,
     sha1_short,
 )
+from .bot_taxonomy import BOT_TAXONOMY_CATEGORIES, list_bot_taxonomy_rows, upsert_bot_taxonomy_entry
 from .index_filtering import build_select_options, filter_index_options
 from .settings import (
     AUTO_SYNC_CHECK_INTERVAL_SECONDS,
@@ -47,59 +48,6 @@ B_LINE_RE = re.compile(
     r'(?P<status>\d{3}) (?P<bytes>\S+) "(?P<referer>[^"]*)" "(?P<ua>[^"]*)"'
 )
 
-DOC_AI_SEARCH_TOKENS = (
-    "chatgpt-user",
-    "oai-searchbot",
-    "claudebot",
-    "claude-web",
-    "googleagent-mariner",
-    "applebot-extended",
-    "perplexitybot",
-    "perplexity-user",
-    "mistralai-user",
-    "meta-externalagent",
-    "cohere-ai",
-    "youbot",
-    "duckassistbot",
-    "moonshot",
-)
-DOC_AI_TRAINING_TOKENS = (
-    "gptbot",
-    "anthropic-ai",
-    "google-extended",
-    "amazonbot",
-    "ccbot",
-    "diffbot",
-    "ai2bot",
-)
-DOC_AI_INDEX_TOKENS = (
-    "googleother",
-    "bytespider",
-    "toutiaospider",
-    "baiduspider-render",
-    "qwen",
-    "alibaba",
-    "yisouspider",
-    "360spider",
-)
-DOC_AI_UNCLASSIFIED_TOKENS = (
-    "facebookbot",
-    "imagesiftbot",
-    "omgilibot",
-    "timpibot",
-)
-DOC_SEO_SPECIFIC_TOKENS = (
-    "googlebot",
-    "googlebot-image",
-    "bingbot",
-    "duckduckbot",
-    "yandexbot",
-    "slurp",
-    "petalbot",
-    "sogou",
-    "sosospider",
-)
-DOC_SEO_GENERIC_TOKENS = ("bot", "spider", "crawler", "crawl", "slurp", "scraper", "scan", "fetch")
 DOC_SUSPICIOUS_PREFIXES = (
     "/.git",
     "/.aws",
@@ -183,7 +131,7 @@ class AnalyticsService:
         self.log_dir = Path(log_dir)
         self.auto_sync_interval_seconds = auto_sync_interval_seconds
         self.remote_source = KibanaRemoteLogSource()
-        self.allow_on_demand_sync = True
+        self.allow_on_demand_sync = not self.remote_source.is_configured()
         self._sync_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._auto_sync_thread: threading.Thread | None = None
@@ -223,37 +171,6 @@ class AnalyticsService:
             AND COALESCE(status, 0) <> 302
         )
         """
-
-    @staticmethod
-    def _doc_ai_search_sql() -> str:
-        return _sql_like_any("user_agent", DOC_AI_SEARCH_TOKENS)
-
-    @staticmethod
-    def _doc_ai_training_sql() -> str:
-        return _sql_like_any("user_agent", DOC_AI_TRAINING_TOKENS)
-
-    @staticmethod
-    def _doc_ai_index_sql() -> str:
-        return f"({_sql_like_any('user_agent', DOC_AI_INDEX_TOKENS)} OR LOWER(COALESCE(user_agent, '')) LIKE '%baiduspider%ai%')"
-
-    @staticmethod
-    def _doc_ai_unclassified_sql() -> str:
-        return _sql_like_any("user_agent", DOC_AI_UNCLASSIFIED_TOKENS)
-
-    @staticmethod
-    def _doc_seo_bot_sql() -> str:
-        specific = _sql_like_any("user_agent", DOC_SEO_SPECIFIC_TOKENS)
-        generic = _sql_like_any("user_agent", DOC_SEO_GENERIC_TOKENS)
-        baidu_non_ai = "LOWER(COALESCE(user_agent, '')) LIKE '%baiduspider%' AND LOWER(COALESCE(user_agent, '')) NOT LIKE '%baiduspider-render%' AND LOWER(COALESCE(user_agent, '')) NOT LIKE '%baiduspider%ai%'"
-        return f"({specific} OR {generic} OR ({baidu_non_ai}))"
-
-    @staticmethod
-    def _doc_any_ai_bot_sql() -> str:
-        return f"({AnalyticsService._doc_ai_search_sql()} OR {AnalyticsService._doc_ai_training_sql()} OR {AnalyticsService._doc_ai_index_sql()} OR {AnalyticsService._doc_ai_unclassified_sql()})"
-
-    @staticmethod
-    def _doc_focus_exclusion_sql() -> str:
-        return f"({AnalyticsService._doc_static_sql()} OR {AnalyticsService._doc_suspicious_sql()} OR {AnalyticsService._doc_mirror_unknown_sql()} OR {AnalyticsService._doc_seo_bot_sql()})"
 
     @staticmethod
     def _calc_previous_window(date_from: str | None, date_to: str | None) -> DateWindow | None:
@@ -390,12 +307,14 @@ class AnalyticsService:
         if rebuild:
             self._reset_full_db()
             self._reset_increment_db()
-        if initial_sync:
+        if initial_sync and self.allow_on_demand_sync:
             self.sync_from_local_logs()
         if auto_sync:
             self.start_auto_sync()
 
     def start_auto_sync(self) -> None:
+        if not self.allow_on_demand_sync:
+            return
         if self._auto_sync_thread and self._auto_sync_thread.is_alive():
             return
 
@@ -415,6 +334,14 @@ class AnalyticsService:
             self._auto_sync_thread.join(timeout=2)
 
     def sync_from_local_logs(self) -> dict[str, Any]:
+        if not self.allow_on_demand_sync:
+            return {
+                "files_scanned": 0,
+                "inserted": 0,
+                "duplicates": 0,
+                "skipped": True,
+                "reason": "local SQLite sync is disabled while the remote ES source is configured",
+            }
         with self._sync_lock:
             self._ensure_full_schema()
             self._ensure_increment_schema()
@@ -482,6 +409,8 @@ class AnalyticsService:
         host: str | None,
         date_from: str,
         date_to: str,
+        summary_text: str | None = None,
+        llm_sections: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         from .reporting import generate_word_report
 
@@ -491,12 +420,36 @@ class AnalyticsService:
             host=host,
             date_from=date_from,
             date_to=date_to,
+            summary_override=summary_text,
+            llm_sections_override=llm_sections,
         )
 
     def resolve_report_download_path(self, file_name: str):
         from .reporting import resolve_report_download_path
 
         return resolve_report_download_path(file_name)
+
+    def build_report_summary_context(self, customer_name: str | None, host: str | None, date_from: str, date_to: str) -> dict[str, Any]:
+        from .reporting import build_report_summary_context
+
+        return build_report_summary_context(
+            self,
+            customer_name=customer_name,
+            host=host,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+    def resolve_helper_bundle_path(self):
+        path = Path(__file__).resolve().parent.parent / "LocalReportLLM_Helper.zip"
+        if not path.exists() or not path.is_file():
+            raise DashboardQueryError(
+                message="helper bundle file not found",
+                error_type="helper_bundle_missing",
+                source="service",
+                status_code=404,
+            )
+        return path
 
     def generate_weekly_comparison(self, customer_name: str | None, host: str | None, date_from: str, date_to: str) -> dict[str, Any]:
         from .reporting import generate_weekly_comparison
@@ -509,7 +462,98 @@ class AnalyticsService:
             date_to=date_to,
         )
 
+    def _normalize_live_host_filters(
+        self,
+        current_index_names: list[str],
+        host: str | None,
+        start_utc: str,
+        end_utc: str,
+    ) -> list[str] | None:
+        if not host or host == "ALL":
+            return None
+        host_options = self.remote_source.list_host_options(
+            index_names=current_index_names,
+            start_utc=start_utc,
+            end_utc=end_utc,
+        )
+        actual_hosts = [str(item.get("value") or "") for item in host_options if str(item.get("value") or "").strip() and str(item.get("value") or "") != "ALL"]
+        if len(actual_hosts) <= 1:
+            return None
+        return [host]
+
+    @staticmethod
+    def _build_live_weekly_comparison(days: list[dict[str, Any]], customer_name: str | None, host: str | None, date_from: str, date_to: str) -> dict[str, Any]:
+        rows = []
+        for row in days or []:
+            rows.append(
+                {
+                    "date": row.get("date"),
+                    "ai_search": int(row.get("ai_search", 0)),
+                    "ai_training": int(row.get("ai_training", 0)),
+                    "ai_index": int(row.get("ai_index", 0)),
+                    "seo_bot": int(row.get("seo_bot", 0)),
+                }
+            )
+        groups: list[list[dict[str, Any]]] = []
+        current_group: list[dict[str, Any]] = []
+        prev_dt = None
+        for item in rows:
+            try:
+                current_dt = date.fromisoformat(str(item.get("date") or ""))
+            except ValueError:
+                continue
+            if not current_group:
+                current_group = [item]
+            else:
+                assert prev_dt is not None
+                if current_dt <= prev_dt + timedelta(days=(6 - prev_dt.weekday())):
+                    current_group.append(item)
+                else:
+                    groups.append(current_group)
+                    current_group = [item]
+            prev_dt = current_dt
+        if current_group:
+            groups.append(current_group)
+
+        weeks = []
+        for idx, group in enumerate(groups, start=1):
+            ai_index = sum(int(item.get("ai_index", 0)) for item in group)
+            ai_search = sum(int(item.get("ai_search", 0)) for item in group)
+            ai_training = sum(int(item.get("ai_training", 0)) for item in group)
+            seo_bot = sum(int(item.get("seo_bot", 0)) for item in group)
+            ai_total = ai_index + ai_search + ai_training
+            total = ai_total + seo_bot
+            days_count = max(len(group), 1)
+            weeks.append(
+                {
+                    "label": f"W{idx}",
+                    "start": group[0]["date"],
+                    "end": group[-1]["date"],
+                    "days": days_count,
+                    "total": total,
+                    "daily_avg": round(total / days_count, 1),
+                    "ai_daily_avg": round(ai_total / days_count, 1),
+                    "seo_daily_avg": round(seo_bot / days_count, 1),
+                }
+            )
+        return {
+            "title_label": host if host and host != "ALL" else (customer_name if customer_name and customer_name != "ALL" else "全部客户"),
+            "weeks": weeks,
+            "note": f"按当前筛选对象在所选时间范围内的全部自然周统计，当前共展示 {len(weeks)} 个周区间。",
+        }
+
     def get_summary(self) -> dict[str, Any]:
+        if not self.allow_on_demand_sync and not self.increment_db_path.exists():
+            return {
+                "metadata": {
+                    "source": "live-es",
+                    "local_sqlite_disabled": "true",
+                },
+                "total_requests": 0,
+                "total_users": 0,
+                "total_bot_families": 0,
+                "daily_overview": [],
+            }
         self._ensure_fresh_daily_sync()
         with self._increment_conn() as conn:
             overview = [dict(row) for row in conn.execute("SELECT * FROM daily_overview ORDER BY date")]
@@ -538,6 +582,17 @@ class AnalyticsService:
         }
 
     def get_increment_snapshot(self, limit: int | None = None) -> dict[str, Any]:
+        if not self.allow_on_demand_sync and not self.increment_db_path.exists():
+            return {
+                "metadata": {
+                    "source": "live-es",
+                    "local_sqlite_disabled": "true",
+                },
+                "daily_overview": [],
+                "daily_user_increment": [],
+                "daily_bot_increment": [],
+                "daily_page_increment": [],
+            }
         self._ensure_fresh_daily_sync()
         clause = "" if not limit else f" LIMIT {int(limit)}"
         with self._increment_conn() as conn:
@@ -563,6 +618,19 @@ class AnalyticsService:
     ) -> dict[str, Any]:
         if self.frontend_snapshot_path.exists():
             return json.loads(self.frontend_snapshot_path.read_text(encoding="utf-8"))
+        if not self.allow_on_demand_sync and not self.increment_db_path.exists():
+            return {
+                "meta": {
+                    "source": "live-es",
+                    "local_sqlite_disabled": "true",
+                },
+                "cards": {},
+                "trend": [],
+                "top_bots": [],
+                "top_pages": [],
+                "recent_users": [],
+                "active_pages": [],
+            }
         self._ensure_fresh_daily_sync()
         snapshot = {}
         if self.snapshot_path.exists():
@@ -1143,7 +1211,7 @@ class AnalyticsService:
         current_index_names = [str(item.get("value") or "") for item in current_indices if item.get("value")]
         if customer and customer != "ALL" and not current_index_names:
             return self._empty_live_dashboard_payload(customer, host, date_from, date_to, top_bots, top_pages, exclude_sensitive_pages, previous_window)
-        host_filters = [host] if host and host != "ALL" else None
+        host_filters = self._normalize_live_host_filters(current_index_names, host, start_utc, end_utc)
         current = self.remote_source.get_live_dashboard_window(
             index_names=current_index_names,
             host_filters=host_filters,
@@ -1161,12 +1229,7 @@ class AnalyticsService:
             end_utc=end_utc,
             limit=8,
         )
-        weekly_comparison = self.generate_weekly_comparison(
-            customer_name=customer,
-            host=host,
-            date_from=date_from,
-            date_to=date_to,
-        )
+        weekly_comparison = self._build_live_weekly_comparison(current.get("days", []), customer, host, date_from, date_to)
 
         focused = current["focused"]
         prev_focused = previous.get("focused", {})
@@ -1523,6 +1586,8 @@ class AnalyticsService:
         }
 
     def get_bot_catalog(self) -> list[dict[str, Any]]:
+        if not self.allow_on_demand_sync and not self.full_db_path.exists():
+            return []
         self._ensure_fresh_daily_sync()
         query = """
         SELECT
@@ -1547,7 +1612,124 @@ class AnalyticsService:
         with self._full_conn() as conn:
             return [dict(row) for row in conn.execute(query)]
 
+    def get_bot_taxonomy(self) -> dict[str, Any]:
+        rows = list_bot_taxonomy_rows()
+        rows.sort(key=lambda item: (item["category"], item["bot_name"].lower(), item["sample_ua_token"]))
+        return {
+            "categories": list(BOT_TAXONOMY_CATEGORIES),
+            "entries": rows,
+        }
+
+    def upsert_bot_taxonomy(
+        self,
+        *,
+        bot_name: str,
+        category: str,
+        sample_ua_token: str,
+        sample_ua: str = "",
+        note: str = "",
+    ) -> dict[str, Any]:
+        result = upsert_bot_taxonomy_entry(
+            bot_name=bot_name,
+            category=category,
+            sample_ua_token=sample_ua_token,
+            sample_ua=sample_ua,
+            note=note,
+        )
+        updated_rows = self._reclassify_requests_for_token(result["sample_ua_token"])
+        result["updated_requests"] = updated_rows
+        return result
+
+    def _reclassify_requests_for_token(self, token: str) -> int:
+        clean_token = str(token or "").strip().lower()
+        if not clean_token or not self.full_db_path.exists():
+            return 0
+        with self._full_conn() as conn:
+            rows = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT request_id, source_side, host, uri, args, status, referer, user_agent, source_ref, client_ip
+                    FROM requests
+                    WHERE LOWER(COALESCE(user_agent, '')) LIKE ?
+                    """,
+                    (f"%{clean_token}%",),
+                )
+            ]
+            if not rows:
+                return 0
+            updates: list[dict[str, Any]] = []
+            for row in rows:
+                user_agent = row.get("user_agent") or ""
+                classification = classify_agent(user_agent)
+                repo_classification = repo_classify_access(
+                    row.get("host"),
+                    row.get("uri"),
+                    row.get("args"),
+                    row.get("status"),
+                    row.get("referer"),
+                    user_agent,
+                    row.get("source_ref"),
+                )
+                user_key, identity_confidence = derive_user_key(
+                    row.get("source_side") or "",
+                    classification["actor_type"],
+                    row.get("client_ip") or "",
+                    user_agent,
+                )
+                session_actor_key = derive_session_actor_key(
+                    classification["actor_type"],
+                    row.get("client_ip") or "",
+                    user_agent,
+                    user_key,
+                )
+                updates.append(
+                    {
+                        "request_id": row["request_id"],
+                        "actor_type": classification["actor_type"],
+                        "actor_bucket": classification["bucket"],
+                        "bot_category": classification["category"],
+                        "bot_family": classification["family"],
+                        "bot_vendor": classification["vendor"],
+                        "bot_product": classification["product"],
+                        "bot_purpose": classification["purpose"],
+                        "bot_description": classification["description"],
+                        "match_token": classification["match_token"],
+                        "repo_category": repo_classification["category"],
+                        "repo_channel": repo_classification["channel"],
+                        "identity_confidence": identity_confidence if user_key else classification["confidence"],
+                        "user_key": user_key or "",
+                        "session_actor_key": session_actor_key or "",
+                    }
+                )
+            conn.executemany(
+                """
+                UPDATE requests
+                SET actor_type = :actor_type,
+                    actor_bucket = :actor_bucket,
+                    bot_category = :bot_category,
+                    bot_family = :bot_family,
+                    bot_vendor = :bot_vendor,
+                    bot_product = :bot_product,
+                    bot_purpose = :bot_purpose,
+                    bot_description = :bot_description,
+                    match_token = :match_token,
+                    repo_category = :repo_category,
+                    repo_channel = :repo_channel,
+                    identity_confidence = :identity_confidence,
+                    user_key = :user_key,
+                    session_actor_key = :session_actor_key
+                WHERE request_id = :request_id
+                """,
+                updates,
+            )
+            conn.commit()
+        self._rebuild_derived_tables()
+        return len(rows)
+
     def get_user_detail(self, user_id: str) -> dict[str, Any] | None:
+        if not self.allow_on_demand_sync and not self.full_db_path.exists():
+            return None
         self._ensure_fresh_daily_sync()
         with self._full_conn() as conn:
             user_row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
